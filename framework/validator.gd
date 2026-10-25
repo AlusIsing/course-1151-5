@@ -1,11 +1,25 @@
 class_name Validator
 extends RefCounted
-## 上場前的檢查：用文字掃描學員的 .gd 擋掉作弊寫法 + 站位、點數預算。
+## 上場前的檢查：用文字掃描學員的 .gd 擋掉作弊和危險的寫法 + 站位、點數預算。
 ## 回傳錯誤訊息陣列，空陣列代表通過。
+##
+## 擂台賽會在講師的電腦上執行所有人的程式，所以除了作弊，也要擋掉
+## 碰檔案、網路、系統的功能，以及打開專案就會在 Godot 編輯器裡執行的 @tool。
+## 訊息裡的 {0} 會換成實際寫到的字。
 
 const BANNED := [
-	[r"\b_process\b|\b_physics_process\b",
-		"不能用 _process / _physics_process，畫面效果請寫在 on_frame(delta)"],
+	[r"@tool\b",
+		"不能用 @tool（打開專案時就會在 Godot 編輯器裡執行）"],
+	[r"\bclass_name\b",
+		"不能用 class_name（全班的類別名稱會撞在一起），自己寫的類別請用 preload(\"檔名.gd\")"],
+	[r"\b(_process|_physics_process|_ready|_enter_tree|_exit_tree|_notification|_input|_unhandled_input|_unhandled_key_input|_shortcut_input)\b",
+		"不能覆寫 {0}，畫面效果請寫在 on_frame(delta)"],
+	[r"\b(OS|FileAccess|DirAccess|ResourceLoader|ResourceSaver|ClassDB|Engine|EngineDebugger|ProjectSettings|JavaScriptBridge|Thread|Mutex|Semaphore|WorkerThreadPool|HTTPRequest|HTTPClient|StreamPeer\w*|PacketPeer\w*|WebSocket\w*|WebRTC\w*|ENet\w*|IP|Marshalls|Input|InputMap|DisplayServer|Performance|GDExtension\w*|\w+Server(2D|3D)?)\b",
+		"不能使用 {0}（系統、檔案、網路和引擎的功能都不能用）"],
+	[r"\b(load|instance_from_id|str_to_var|bytes_to_var_with_objects|get_script|get_property_list|get_method_list)\s*\(",
+		"不能用 {0}()，要用自己資料夾裡的檔案請寫 preload(\"檔名.gd\")"],
+	[r"\"\"\"|'''",
+		"不能用三個引號的多行字串"],
 	[r"\bget_tree\b|\bget_node\b|\bget_parent\b|\bget_child(ren)?\b|\bfind_child(ren)?\b|\$[\w\"]",
 		"不能用 get_tree / get_node 這類方法去抓別的物件，請用 get_allies() / get_enemies()"],
 	[r"\b_framework",
@@ -143,6 +157,9 @@ static func check_source(path: String) -> Array[String]:
 	var lines := text.split("\n")
 	var frame_indent := -1    # >= 0 代表正在 on_frame 的函式本體裡
 	var func_regex := RegEx.create_from_string(r"^(\s*)func\s+(\w+)")
+	var path_regex := RegEx.create_from_string(r"\b(preload|extends)\s*\(?\s*\"([^\"]*)\"")
+	# 學員的檔案只能用自己隊伍資料夾 teams/<帳號>/ 裡的東西
+	var team_root: String = Rules.team_dir(path.trim_prefix(Rules.TEAMS_DIR + "/").get_slice("/", 0))
 	var frame_regex := RegEx.create_from_string(FRAME_FORBIDDEN)
 	for i in lines.size():
 		var code := _strip(lines[i])
@@ -157,15 +174,27 @@ static func check_source(path: String) -> Array[String]:
 
 		var where := "%s 第 %d 行" % [_short(path), i + 1]
 		for rule in BANNED:
-			if RegEx.create_from_string(rule[0]).search(code):
-				errors.append("%s：%s" % [where, rule[1]])
+			var found: RegExMatch = RegEx.create_from_string(rule[0]).search(code)
+			if found:
+				var word: String = found.get_string(1) if found.get_group_count() >= 1 and found.get_string(1) != "" else found.get_string()
+				errors.append("%s：%s" % [where, rule[1].replace("{0}", word)])
+		# 下面兩項要連字串內容一起看
+		var raw: String = _strip(lines[i], true)
+		if not code.contains("_framework") and raw.contains("_framework"):
+			errors.append("%s：不能碰框架內部（_framework 開頭的東西）" % where)
+		for path_match: RegExMatch in path_regex.search_all(raw):
+			var target: String = path_match.get_string(2)
+			var resolved: String = target if target.begins_with("res://") \
+					else path.get_base_dir().path_join(target).simplify_path()
+			if not resolved.begins_with(team_root + "/"):
+				errors.append("%s：只能用自己資料夾 %s/ 裡的檔案，不能用 %s" % [where, _short(team_root), target])
 		if frame_indent >= 0 and frame_regex.search(code):
 			errors.append("%s：on_frame 只能做畫面效果，不能呼叫戰鬥 API" % where)
 	return errors
 
 
-## 去掉字串內容和註解，避免誤判
-static func _strip(line: String) -> String:
+## 去掉註解和字串內容，避免誤判；keep_strings = true 時保留字串內容
+static func _strip(line: String, keep_strings: bool = false) -> String:
 	var result := ""
 	var quote := ""
 	var i := 0
@@ -174,8 +203,12 @@ static func _strip(line: String) -> String:
 		if quote != "":
 			if c == "\\":
 				i += 1
+				if keep_strings and i < line.length():
+					result += c + line[i]
 			elif c == quote:
 				quote = ""
+				result += c
+			elif keep_strings:
 				result += c
 		elif c == "\"" or c == "'":
 			quote = c
