@@ -20,6 +20,7 @@ var _framework_locked := false
 var _framework_dead := false
 var _framework_battle: Battle = null
 var _framework_team := 0
+var _framework_cell := Vector2i.ZERO
 
 # --- 屬性（學員在子類別的 _init() 設定，validator 會檢查預算）---
 var unit_name: String = "Unit"
@@ -106,9 +107,35 @@ func get_enemies() -> Array[Unit]:
 		return []
 	return _framework_battle.get_alive(1 - _framework_team)
 
-## 自己站在第幾個位置（0 = 最前排）
+## 自己在 get_allies() 裡排第幾個（照行動順序：前排 → 後排、左 → 右）
 func get_slot() -> int:
 	return get_allies().find(self)
+
+## 自己站的格子：x 是行（0 左、1 中、2 右），y 是排（0 前排、1 中排、2 後排）
+func get_grid_position() -> Vector2i:
+	return _framework_cell
+
+## 上下左右相鄰、還活著的隊友（不含自己）
+func get_adjacent_allies() -> Array[Unit]:
+	if _framework_battle == null:
+		return []
+	return _framework_battle.adjacent_allies(self)
+
+## 某一排還活著的角色，由左到右。enemy = true 查敵方，false 查我方
+func get_units_in_row(row: int, enemy: bool) -> Array[Unit]:
+	if _framework_battle == null:
+		return []
+	return _framework_battle.units_in_row(_framework_team if not enemy else 1 - _framework_team, row)
+
+## 某一行還活著的角色，由前排到後排。enemy = true 查敵方，false 查我方
+func get_units_in_column(col: int, enemy: bool) -> Array[Unit]:
+	if _framework_battle == null:
+		return []
+	return _framework_battle.units_in_column(_framework_team if not enemy else 1 - _framework_team, col)
+
+## 職業名稱（戰士、坦克、射手、法師、補師、刺客），直接 extends Unit 的算戰士
+func get_role() -> String:
+	return "戰士"
 
 ## 現在是第幾回合（on_battle_start 時是 0）
 func get_round() -> int:
@@ -151,7 +178,7 @@ func _framework_reject(message: String) -> void:
 func _draw() -> void:
 	var font := ThemeDB.fallback_font
 	var r := body_radius
-	var w := maxf(96.0, r * 2.0 + 12.0)
+	var w := maxf(140.0, r * 2.0 + 12.0)
 
 	# 身體 + 眼睛
 	draw_circle(Vector2.ZERO, r, color)

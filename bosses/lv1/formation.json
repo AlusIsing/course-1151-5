@@ -1,0 +1,9 @@
+{
+	"units": [
+		{
+			"script": "res://bosses/lv1/boss.gd",
+			"col": 1,
+			"row": 0
+		}
+	]
+}

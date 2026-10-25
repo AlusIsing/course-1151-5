@@ -2,15 +2,26 @@ class_name Battle
 extends RefCounted
 ## 戰鬥流程。純邏輯、不碰畫面，擂台和無畫面模擬共用。
 ##
+## 雙方各有 3×3 棋盤（前排、中排、後排），角色站好就不會移動。
+##
 ## 一回合的順序：
 ##   1. Boss 的 on_round_start
-##   2. 雙方前排同時攻擊 → 扣血
-##   3. 攻擊者的 on_attack → 受傷者的 on_hurt
-##   4. 結算死亡：on_death → 隊友的 on_ally_death → 後面的角色往前補位
-##   5. 一方全滅就結束；超過 MAX_ROUNDS 回合算挑戰者輸
+##   2. 照行動順序，每隻角色輪流行動：選目標 → 扣血 → 自己的 on_attack → 受傷者的 on_hurt
+##   3. 結算死亡：on_death → 隊友的 on_ally_death → 從場上移除（召喚的分身站到原本的格子）
+##   4. 一方全滅就結束；超過 MAX_ROUNDS 回合算挑戰者輸
+##
+## 行動順序固定：玩家隊伍先、Boss 隊伍後；同一隊由前排到後排、每排由左到右。
+## 輪到的時候血量已經歸零的角色不會行動。
+##
+## 職業的攻擊目標（「最前排」指還有活著角色的最前面一排）：
+##   戰士、坦克：敵方最前排，優先同一行，沒有就打最近的一行（一樣近打左邊）
+##   刺客：敵方最後排，規則同上
+##   射手：任何一格，由 Archer.choose_target() 決定（預設血最少）
+##   法師：敵方同一行的所有角色；同一行沒人就打最近的一行
+##   補師：不攻擊，幫相鄰有受傷的隊友回 attack 點血
+##   坦克另外會替相鄰的隊友分擔 TANK_SHARE_PERCENT% 的傷害
 ##
 ## 規則細節：
-##   - 同一個階段裡，玩家隊伍先、Boss 隊伍後；隊伍內由前排到後排
 ##   - 血量歸零的角色只會再觸發 on_death，其他事件都不會觸發
 ##   - 技能造成的傷害會立刻觸發對方的 on_hurt，連鎖最多 MAX_EVENT_DEPTH 層
 
@@ -19,13 +30,14 @@ signal unit_added(unit: Unit)
 signal unit_died(unit: Unit)
 signal unit_damaged(unit: Unit, amount: int)
 signal unit_healed(unit: Unit, amount: int)
+signal unit_acted(unit: Unit, target: Unit)   # 普攻或治療，畫面拿來做「往目標衝一下」
 signal finished(result: String)
 
 const PLAYER := 0
 const ENEMY := 1
 const TEAM_COLORS := ["#7cc4ff", "#ff8a80"]
 
-var teams: Array = [[], []]   # 兩隊還在場上的角色（Array of Unit），最前排在 [0]
+var teams: Array = [[], []]   # 兩隊還在場上的角色（Array of Unit），照行動順序排
 var roster: Array[Unit] = []  # 這場戰鬥出現過的所有角色（包含陣亡的）
 var round_number := 0
 var result := ""              # "" 進行中 / "win" / "lose"
@@ -41,19 +53,23 @@ var _tokens := {}         # 死亡的角色 -> 牠召喚的 token 陣列
 var _token_budget := {}   # 死亡的角色 -> 剩下的 token 預算
 
 
-func _init(player_scripts: Array, boss_script: Script) -> void:
+## player、enemy 是兩隊的陣型；腳本要先通過 Validator 檢查
+func _init(player: Formation, enemy: Formation) -> void:
 	rng.seed = Rules.SEED
 	seed(Rules.SEED)
-	for script in player_scripts:
-		_add_unit(script.new(), PLAYER)
-	_add_unit(boss_script.new(), ENEMY)
+	for pair: Array in [[player, PLAYER], [enemy, ENEMY]]:
+		var formation: Formation = pair[0]
+		var slots: Array[Formation.Slot] = formation.sorted_slots()
+		var scripts: Array[Script] = formation.load_scripts()
+		for i: int in slots.size():
+			_add_unit(scripts[i].new(), pair[1], slots[i].cell)
 
 
 # ---------------------------------------------------------------- 流程
 
 func start() -> void:
 	_log("[b]=== 戰鬥開始（種子 %d）===[/b]" % Rules.SEED)
-	for unit in _all_alive():
+	for unit: Unit in _all_alive():
 		_fire(unit, "on_battle_start", [])
 	_resolve_deaths()
 	_check_end()
@@ -65,81 +81,150 @@ func step() -> void:
 	round_number += 1
 	_log("[b]— 第 %d 回合 —[/b]" % round_number)
 
-	for unit in _all_alive():
+	for unit: Unit in _all_alive():
 		if unit is Boss:
 			_fire(unit, "on_round_start", [round_number])
 	_resolve_deaths()
 	if _check_end():
 		return
 
-	# 雙方前排同時攻擊：先算好所有命中，再一起扣血
-	var hits := []        # [attacker, target, amount]
-	var attacks := []     # [attacker, 主要目標]
-	for team in [PLAYER, ENEMY]:
-		var attacker := _front(team)
-		var defender := _front(1 - team)
-		if attacker == null or defender == null:
-			continue
-		var targets: Array[Unit] = [defender]
-		var amount := attacker.attack
-		var boss := attacker as Boss
-		if boss:
-			if boss.skip_attack:
-				continue
-			if boss.pierce:
-				targets = get_alive(1 - team)
-				amount = boss.pierce_damage
-		if amount <= 0:
-			continue
-		attacks.append([attacker, defender])
-		for target in targets:
-			hits.append([attacker, target, amount])
-
-	var hurt := []        # [target, 實際傷害, source]
-	for hit in hits:
-		var dealt := _apply_damage(hit[1], hit[2], hit[0], "攻擊")
-		if dealt > 0:
-			hurt.append([hit[1], dealt, hit[0]])
-	for pair in attacks:
-		if pair[0].is_alive():
-			_fire(pair[0], "on_attack", [pair[1]])
-	for entry in hurt:
-		if entry[0].is_alive():
-			_fire(entry[0], "on_hurt", [entry[1], entry[2]])
+	for unit: Unit in _all_alive():
+		if unit.is_alive():
+			_act(unit)
 
 	_resolve_deaths()
 	_check_end()
 
 
+func _act(unit: Unit) -> void:
+	var boss: Boss = unit as Boss
+	if boss and boss.skip_attack:
+		return
+	if unit is Healer:
+		_heal_neighbors(unit)
+		return
+
+	var targets: Array[Unit] = _pick_targets(unit)
+	var amount: int = unit.attack
+	if boss and boss.pierce:
+		targets = get_alive(1 - unit._framework_team)
+		amount = boss.pierce_damage
+	if targets.is_empty() or amount <= 0:
+		return
+
+	unit_acted.emit(unit, targets[0])
+	var hurt: Array = []      # [受傷者, 實際傷害]
+	for target: Unit in targets:
+		hurt.append_array(_apply_damage(target, amount, unit, "攻擊"))
+	if unit.is_alive():
+		_fire(unit, "on_attack", [targets[0]])
+	for entry: Array in hurt:
+		if entry[0].is_alive():
+			_fire(entry[0], "on_hurt", [entry[1], unit])
+
+
+func _heal_neighbors(healer: Unit) -> void:
+	if healer.attack <= 0:
+		return
+	var first := true
+	for ally: Unit in adjacent_allies(healer):
+		var amount: int = mini(healer.attack, ally.max_hp - ally.hp)
+		if amount <= 0:
+			continue
+		if first:
+			unit_acted.emit(healer, ally)
+			first = false
+		_write(ally, "hp", ally.hp + amount)
+		_log("%s 治療 %s，回了 %d 血（%d/%d）" % [_n(healer), _n(ally), amount, ally.hp, ally.max_hp])
+		unit_healed.emit(ally, amount)
+
+
+## 照職業挑普攻的目標（法師會回傳整行）
+func _pick_targets(attacker: Unit) -> Array[Unit]:
+	var enemy_team: int = 1 - attacker._framework_team
+	var enemies: Array[Unit] = get_alive(enemy_team)
+	if enemies.is_empty():
+		return []
+	var col: int = attacker._framework_cell.x
+
+	if attacker is Mage:
+		return units_in_column(enemy_team, _nearest_column(enemies, col))
+
+	if attacker is Archer:
+		var picked: Unit = (attacker as Archer).choose_target(enemies.duplicate())
+		if picked == null or not enemies.has(picked):
+			report_violation(attacker, "choose_target() 要回傳一隻還活著的敵人，這次改打 %s" % _n(enemies[0]))
+			picked = enemies[0]
+		return [picked]
+
+	# 近戰打最前排、刺客打最後排；get_alive 照前排到後排排好
+	var row: int = enemies[-1]._framework_cell.y if attacker is Assassin else enemies[0]._framework_cell.y
+	var in_row: Array[Unit] = units_in_row(enemy_team, row)
+	return [in_row[_nearest_index(in_row, col)]]
+
+
+## units 裡離 col 最近的那隻的索引；一樣近取前面的（units 由左到右排，所以是左邊）
+func _nearest_index(units: Array[Unit], col: int) -> int:
+	var best: int = 0
+	for i: int in units.size():
+		if absi(units[i]._framework_cell.x - col) < absi(units[best]._framework_cell.x - col):
+			best = i
+	return best
+
+
+func _nearest_column(units: Array[Unit], col: int) -> int:
+	var best: int = -1
+	for unit: Unit in units:
+		var c: int = unit._framework_cell.x
+		if best < 0 or absi(c - col) < absi(best - col) or (absi(c - col) == absi(best - col) and c < best):
+			best = c
+	return best
+
+
 func _resolve_deaths() -> void:
 	# on_death 裡的技能可能再打死別人，所以重複結算到沒人死為止
-	for _i in 20:
+	for _i: int in 20:
 		var dying: Array[Unit] = []
-		for unit in _all_units():
+		for unit: Unit in _all_units():
 			if not unit._framework_dead and unit.hp <= 0:
 				dying.append(unit)
 		if dying.is_empty():
 			return
-		for unit in dying:
+		for unit: Unit in dying:
 			unit._framework_dead = true
 			_tokens[unit] = []
 			_token_budget[unit] = Rules.TOKEN_BUDGET
-		for unit in dying:
+		for unit: Unit in dying:
 			_log("%s 倒下了" % _n(unit))
 			_fire(unit, "on_death", [])
-			for ally in get_alive(unit._framework_team):
+			for ally: Unit in get_alive(unit._framework_team):
 				_fire(ally, "on_ally_death", [unit])
-		for unit in dying:
-			var team: Array = teams[unit._framework_team]
-			var index := team.find(unit)
-			team.remove_at(index)
+		for unit: Unit in dying:
+			teams[unit._framework_team].erase(unit)
 			unit_died.emit(unit)
-			for token in _tokens[unit]:
-				_add_unit(token, unit._framework_team, index)
-				index += 1
+			for token: Unit in _tokens[unit]:
+				var cell: Vector2i = _free_cell_near(unit._framework_team, unit._framework_cell)
+				if cell.x < 0:
+					token.free()
+					continue
+				_add_unit(token, unit._framework_team, cell)
 				unit_added.emit(token)
 			_tokens.erase(unit)
 			_token_budget.erase(unit)
+
+
+## 離 origin 最近的空格（先看自己那格，再看上下左右，最後照行動順序找）
+func _free_cell_near(team: int, origin: Vector2i) -> Vector2i:
+	var candidates: Array[Vector2i] = [origin]
+	for offset: Vector2i in [Vector2i.UP, Vector2i.LEFT, Vector2i.RIGHT, Vector2i.DOWN]:
+		candidates.append(origin + offset)
+	for row: int in Rules.GRID_ROWS:
+		for col: int in Rules.GRID_COLS:
+			candidates.append(Vector2i(col, row))
+	for cell: Vector2i in candidates:
+		if Rules.is_valid_cell(cell) and _unit_at(team, cell) == null:
+			return cell
+	return Vector2i(-1, -1)
 
 
 func _check_end() -> bool:
@@ -182,16 +267,36 @@ func _fire(unit: Unit, method: String, args: Array) -> void:
 	_calls_left = saved[2]
 
 
-func _apply_damage(target: Unit, amount: int, source: Unit, verb: String) -> int:
+## 扣血；相鄰有坦克的話坦克分擔一部分。回傳 [[受傷者, 實際傷害], ...]
+func _apply_damage(target: Unit, amount: int, source: Unit, verb: String) -> Array:
 	if not target.is_alive() or amount <= 0:
-		return 0
+		return []
 	var boss := target as Boss
 	if boss:
 		amount *= boss.damage_taken_multiplier
-	_write(target, "hp", maxi(0, target.hp - amount))
-	_log("%s %s %s，造成 %d 傷害（剩 %d）" % [_n(source), verb, _n(target), amount, target.hp])
-	unit_damaged.emit(target, amount)
-	return amount
+	var tank: Unit = _guarding_tank(target)
+	var shared: int = amount * Rules.TANK_SHARE_PERCENT / 100 if tank else 0
+	var taken: int = amount - shared
+
+	var hurt: Array = []
+	_write(target, "hp", maxi(0, target.hp - taken))
+	_log("%s %s %s，造成 %d 傷害（剩 %d）" % [_n(source), verb, _n(target), taken, target.hp])
+	unit_damaged.emit(target, taken)
+	hurt.append([target, taken])
+	if shared > 0:
+		_write(tank, "hp", maxi(0, tank.hp - shared))
+		_log("%s 替 %s 擋下 %d 傷害（剩 %d）" % [_n(tank), _n(target), shared, tank.hp])
+		unit_damaged.emit(tank, shared)
+		hurt.append([tank, shared])
+	return hurt
+
+
+## 會替 unit 分擔傷害的坦克：相鄰、還活著、行動順序最前面的那隻
+func _guarding_tank(unit: Unit) -> Unit:
+	for ally: Unit in adjacent_allies(unit):
+		if ally is Tank:
+			return ally
+	return null
 
 
 # ---------------------------------------------------------------- 戰鬥 API
@@ -200,9 +305,9 @@ func api_deal_damage(caller: Unit, target: Unit, amount: int) -> void:
 	if not _api_begin(caller, "deal_damage") or not _check_target(caller, target, "deal_damage"):
 		return
 	amount = _cap(caller, "deal_damage", amount, 1, Rules.DAMAGE_CAP)
-	var dealt := _apply_damage(target, amount, caller, "用技能打")
-	if dealt > 0 and target.is_alive():
-		_fire(target, "on_hurt", [dealt, caller])
+	for entry: Array in _apply_damage(target, amount, caller, "用技能打"):
+		if entry[0].is_alive():
+			_fire(entry[0], "on_hurt", [entry[1], caller])
 
 
 func api_heal(caller: Unit, target: Unit, amount: int) -> void:
@@ -272,7 +377,7 @@ func report_violation(unit: Unit, message: String) -> void:
 
 func _api_begin(caller: Unit, api: String) -> bool:
 	if _actor != caller:
-		report_violation(caller, "%s() 只能在自己的戰鬥事件裡用（on_frame 不行）" % api)
+		report_violation(caller, "%s() 只能在自己的戰鬥事件裡用（on_frame、choose_target 不行）" % api)
 		return false
 	if caller is Boss:
 		return true
@@ -302,14 +407,49 @@ func _cap(caller: Unit, api: String, amount: int, low: int, high: int) -> int:
 	return capped
 
 
-# ---------------------------------------------------------------- 工具
+# ---------------------------------------------------------------- 棋盤查詢
 
+## 還活著的角色，照行動順序（前排 → 後排、左 → 右）
 func get_alive(team: int) -> Array[Unit]:
 	var alive: Array[Unit] = []
-	for unit in teams[team]:
+	for unit: Unit in teams[team]:
 		if unit.is_alive():
 			alive.append(unit)
 	return alive
+
+
+func units_in_row(team: int, row: int) -> Array[Unit]:
+	var units: Array[Unit] = []
+	for unit: Unit in get_alive(team):
+		if unit._framework_cell.y == row:
+			units.append(unit)
+	return units
+
+
+func units_in_column(team: int, col: int) -> Array[Unit]:
+	var units: Array[Unit] = []
+	for unit: Unit in get_alive(team):
+		if unit._framework_cell.x == col:
+			units.append(unit)
+	return units
+
+
+func adjacent_allies(unit: Unit) -> Array[Unit]:
+	var units: Array[Unit] = []
+	for ally: Unit in get_alive(unit._framework_team):
+		var diff: Vector2i = (ally._framework_cell - unit._framework_cell).abs()
+		if diff.x + diff.y == 1:
+			units.append(ally)
+	return units
+
+
+# ---------------------------------------------------------------- 工具
+
+func _unit_at(team: int, cell: Vector2i) -> Unit:
+	for unit: Unit in teams[team]:
+		if unit._framework_cell == cell:
+			return unit
+	return null
 
 
 func _all_units() -> Array[Unit]:
@@ -325,21 +465,21 @@ func _all_alive() -> Array[Unit]:
 	return alive
 
 
-func _front(team: int) -> Unit:
-	var alive := get_alive(team)
-	return alive[0] if not alive.is_empty() else null
-
-
-func _add_unit(unit: Unit, team: int, index := -1) -> void:
+func _add_unit(unit: Unit, team: int, cell: Vector2i) -> void:
 	unit._framework_battle = self
 	unit._framework_team = team
+	unit._framework_cell = cell
 	_write(unit, "hp", unit.max_hp)
 	unit._framework_locked = true
 	roster.append(unit)
-	if index < 0:
-		teams[team].append(unit)
-	else:
-		teams[team].insert(index, unit)
+	# 照行動順序插進去，get_alive() 就不用每次排序
+	var list: Array = teams[team]
+	var index: int = list.size()
+	for i: int in list.size():
+		if Rules.cell_order(list[i]._framework_cell) > Rules.cell_order(cell):
+			index = i
+			break
+	list.insert(index, unit)
 
 
 func _write(unit: Unit, property: StringName, value: Variant) -> void:
@@ -348,10 +488,12 @@ func _write(unit: Unit, property: StringName, value: Variant) -> void:
 	unit._framework_writing = false
 
 
+## 戰鬥紀錄裡的名字，例如「[前排左] 騎士」
 func _n(unit: Unit) -> String:
 	if unit == null:
 		return "？"
-	return "[color=%s]%s[/color]" % [TEAM_COLORS[unit._framework_team], unit.unit_name]
+	return "[color=%s][lb]%s[rb] %s[/color]" % [TEAM_COLORS[unit._framework_team],
+			Rules.cell_name(unit._framework_cell), unit.unit_name]
 
 
 func _log(text: String) -> void:

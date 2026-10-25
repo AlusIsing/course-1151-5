@@ -1,6 +1,6 @@
 class_name Validator
 extends RefCounted
-## 上場前的檢查：點數預算 + 用文字掃描學員的 .gd 擋掉作弊寫法。
+## 上場前的檢查：陣型格子、點數預算 + 用文字掃描學員的 .gd 擋掉作弊寫法。
 ## 回傳錯誤訊息陣列，空陣列代表通過。
 
 const BANNED := [
@@ -22,10 +22,37 @@ const BANNED := [
 const FRAME_FORBIDDEN := r"\b(deal_damage|heal|buff_attack|summon_token|say)\s*\("
 
 
+## 玩家的陣型：格子 + 預算 + 程式碼掃描
+static func check_formation(formation: Formation) -> Array[String]:
+	var errors: Array[String] = check_cells(formation)
+	if not errors.is_empty():
+		return errors
+	errors.append_array(check_team(formation.load_scripts()))
+	return errors
+
+
+## 格子座標要在棋盤內、不能重疊，腳本要讀得到（Boss 的陣型也用這個檢查）
+static func check_cells(formation: Formation) -> Array[String]:
+	var errors: Array[String] = formation.errors.duplicate()
+	var used: Dictionary = {}
+	for slot: Formation.Slot in formation.slots:
+		var where: String = "%s（col %d, row %d）" % [_short(slot.path), slot.cell.x, slot.cell.y]
+		if not Rules.is_valid_cell(slot.cell):
+			errors.append("%s：格子要在 %d×%d 棋盤裡（col 0–%d、row 0–%d）"
+					% [where, Rules.GRID_COLS, Rules.GRID_ROWS, Rules.GRID_COLS - 1, Rules.GRID_ROWS - 1])
+		elif used.has(slot.cell):
+			errors.append("%s：和 %s 站在同一格 %s" % [where, _short(used[slot.cell]), Rules.cell_name(slot.cell)])
+		else:
+			used[slot.cell] = slot.path
+		if not ResourceLoader.exists(slot.path) or not load(slot.path) is Script:
+			errors.append("%s：讀不到這個角色腳本" % where)
+	return errors
+
+
 static func check_team(members: Array) -> Array[String]:
 	var errors: Array[String] = []
 	if members.is_empty():
-		errors.append("隊伍是空的，請在 my_team/team.gd 的 MEMBERS 加入角色")
+		errors.append("隊伍是空的，請用陣型編輯器把角色拖到棋盤上")
 		return errors
 	if members.size() > Rules.MAX_UNITS:
 		errors.append("隊伍最多 %d 隻，現在有 %d 隻" % [Rules.MAX_UNITS, members.size()])
@@ -36,7 +63,7 @@ static func check_team(members: Array) -> Array[String]:
 	for i in members.size():
 		var script := members[i] as Script
 		if script == null:
-			errors.append("MEMBERS 第 %d 個不是角色腳本" % (i + 1))
+			errors.append("陣型第 %d 隻不是角色腳本" % (i + 1))
 			continue
 		# 整條繼承鏈都要掃（學員可能繼承自己或範例的角色）
 		var current := script

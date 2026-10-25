@@ -25,23 +25,24 @@ text = "擂台"
 
 [node name="Banner" type="Label" parent="UI"]
 visible = false
-offset_top = 70.0
-offset_right = 1152.0
-offset_bottom = 130.0
+offset_left = 40.0
+offset_top = 300.0
+offset_right = 630.0
+offset_bottom = 360.0
 theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
 theme_override_constants/outline_size = 10
 theme_override_font_sizes/font_size = 44
 horizontal_alignment = 1
 
 [node name="LogPanel" type="Panel" parent="UI"]
-offset_left = 12.0
-offset_top = 392.0
+offset_left = 652.0
+offset_top = 52.0
 offset_right = 1140.0
 offset_bottom = 612.0
 
 [node name="Log" type="RichTextLabel" parent="UI"]
-offset_left = 24.0
-offset_top = 400.0
+offset_left = 664.0
+offset_top = 60.0
 offset_right = 1128.0
 offset_bottom = 604.0
 bbcode_enabled = true
@@ -54,4 +55,4 @@ offset_right = 1136.0
 offset_bottom = 642.0
 theme_override_colors/font_color = Color(1, 1, 1, 0.5)
 theme_override_font_sizes/font_size = 14
-text = "R 重新開始　　空白鍵 暫停　　1 / 2 / 3 切換速度　　戰鬥紀錄在上面，往上捲可以看完整過程"
+text = "R 重新開始　　Esc 回陣型編輯器　　空白鍵 暫停　　1 / 2 / 3 切換速度　　右邊是戰鬥紀錄，往上捲可以看完整過程"
