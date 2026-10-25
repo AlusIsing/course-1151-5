@@ -64,7 +64,7 @@ func _init() -> void:
 				stats[b]["games"] += 1
 				if battle.winner == battle.first_team:
 					first_wins += 1
-				if battle.round_number >= Rules.MAX_ROUNDS and not battle._team_wiped():
+				if battle.result_reason.begins_with("超過"):
 					timeouts += 1
 				total_rounds += battle.round_number
 				total_games += 1
