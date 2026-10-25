@@ -159,8 +159,21 @@ func on_attack(target: Unit) -> void:
 
 - 雙方各有 **3×3 棋盤**：前排、中排、後排，每排有左、中、右三格。角色站好就**不會移動**
 - 每回合每隻角色輪流行動一次，**順序固定**：我方先、Boss 隊伍後；同一隊從前排到後排、每排從左到右。輪到時已經倒下的角色不會行動
-- 一回合結束時結算倒下的角色；一方全滅就結束；**超過 30 回合**還沒打倒 Boss 算你輸，同歸於盡也算你輸
+- 每回合開始：先回復[能量](#能量)，再結算[中毒](#流派)，然後才輪到角色行動
+- 每個動作（一次行動、一層毒發）結束後**馬上**結算倒下的角色：`on_death` → 死靈加成 → 隊友的 `on_ally_death`，全部結算完才輪到下一個動作
+- 一方全滅就結束；**打完 30 回合**還沒打倒 Boss 算你輸，同歸於盡也算你輸
 - 隨機用固定種子，同樣的隊伍打同樣的 Boss，結果永遠一樣
+
+### 傷害怎麼算
+
+每一次傷害都照這個順序結算：
+
+1. 基礎傷害：普攻是 `attack`，技能是指定的 `amount`
+2. 加上攻擊者的增傷（狂血 4 隻的 +2，只對普攻有效）
+3. 加上目標身上的詛咒，並用掉詛咒
+4. 扣掉目標的護盾（**毒傷跳過這一步**）
+5. 坦克分擔：目標相鄰有我方坦克時，坦克承受一半（無條件捨去）；目標本身是坦克時不分擔
+6. 扣血
 
 ### 職業
 
@@ -178,6 +191,7 @@ func on_attack(target: Unit) -> void:
 - 「最前排」「最後排」指**還有角色活著**的那一排：前排全滅，近戰就改打中排
 - 「同一行」沒有敵人時，改打**最近的一行**，一樣近就打左邊
 - 補師不會觸發 `on_attack`；坦克分擔的傷害會觸發坦克自己的 `on_hurt`
+- 坦克自己被打時，不會被旁邊的另一隻坦克分擔
 
 ### 預算
 
@@ -192,7 +206,43 @@ func on_attack(target: Unit) -> void:
 | `max_hp` | 1–40 |
 | `attack` | 0–10 |
 
-技能不花點數，但戰鬥 API 有數值上限（見下方）。超過預算或違規的隊伍不能上場，陣型預覽會列出原因。
+技能不花點數，但要花[能量](#能量)，戰鬥 API 也有數值上限（見下方）。超過預算或違規的隊伍不能上場，陣型預覽會列出原因。
+
+### 能量
+
+- 每隻角色有 `energy`（唯讀），開場 **3 點**，每回合開始回復 **3 點**，最多存 **6 點**
+- 普攻和補師的普通治療**不花能量**；技能 API 要花能量（見[戰鬥 API](#戰鬥-api)）
+- 能量不夠時 API 回傳 `false`、技能不生效、也不扣能量，戰鬥紀錄會寫「能量不足」
+- 用 `get_energy()` 查現在能用多少（死靈角色在 `on_death` 裡會包含靈魂能量）
+- Boss 不用能量
+
+### 流派
+
+在 `_init()` 設定 `school`，不寫就是沒有流派：
+
+```gdscript
+func _init() -> void:
+	unit_name = "毒蛇射手"
+	max_hp = 10
+	attack = 2
+	grid_position = Vector2i(0, 2)
+	school = School.VENOM
+```
+
+| 流派 | `school` | 專屬 API | 同隊 2 隻 | 同隊 4 隻（包含 2 隻的效果） |
+|---|---|---|---|---|
+| 🧪 劇毒 | `School.VENOM` | `poison` | 我方施加的毒傷每回合 +1 | 中毒的敵人**無法被治療**（`heal`、吸血、狂血回血都無效） |
+| 🛡️ 聖盾 | `School.AEGIS` | `shield` | 開場全隊 3 點護盾 | 開場全隊 6 點護盾（取代 3 點，不疊加） |
+| 🔥 狂血 | `School.BLOOD` | `drain` | 我方普攻命中後，攻擊者回 1 血（免費） | 我方血量低於一半的角色普攻 +2 |
+| 💀 死靈 | `School.NECRO` | `curse` | 我方死靈角色死亡時，獲得 5 點**靈魂能量** | 我方死靈角色死亡時，對全體敵人造成 1 點傷害（免費） |
+
+- 流派加成看**開場時**同流派的隻數，之後有人陣亡也不會失去加成；召喚的分身沒有流派
+- 誰都能用四個流派 API，但施放者**和 API 同流派是正常價，不同（包含沒有流派）是兩倍價**
+- 靈魂能量只在那隻角色的 `on_death()` 裡能用，會先用靈魂能量、不夠再用一般能量，`on_death` 結束就清空
+- 死靈 4 隻的全體傷害在 `on_death()` 執行完之後才結算
+- 擂台上每隊棋盤上方會顯示啟動的流派加成（例如「🧪 劇毒 4/4」），角色身上會顯示護盾（左邊）、中毒層數和詛咒（右邊）
+
+`teams/` 底下有四個流派的範例隊伍：`example_venom`、`example_aegis`、`example_blood`、`example_necro`。
 
 ## 角色 API
 
@@ -211,14 +261,20 @@ func on_attack(target: Unit) -> void:
 
 ### 戰鬥 API
 
-| 方法 | 效果 | 上限 |
-|---|---|---|
-| `deal_damage(target, amount)` | 造成傷害 | 每次 1–5 |
-| `heal(target, amount)` | 回血 | 每次 1–5，不超過 `max_hp` |
-| `buff_attack(target, amount)` | 加攻擊 | 每次 1–3，最多加到 15 |
-| `summon_token(hp, attack)` | 召喚沒有技能的分身到自己的位置（第二隻起放在附近的空格） | 只能在 `on_death` 用，合計 `hp + 2×attack ≤ 10` |
-| `say(text)` | 在戰鬥紀錄說一句話 | — |
+| 方法 | 效果 | 能量 | 上限 |
+|---|---|---|---|
+| `deal_damage(target, amount)` | 造成傷害 | `amount` | 每次 1–5 |
+| `heal(target, amount)` | 回血 | `amount` | 每次 1–5，不超過 `max_hp` |
+| `buff_attack(target, amount)` | 加攻擊 | `amount × 2` | 每次 1–3，最多加到 15 |
+| `summon_token(hp, attack)` | 召喚沒有技能的分身到自己的位置（第二隻起放在附近的空格） | 免費 | 只能在 `on_death` 用，合計 `hp + 2×attack ≤ 10` |
+| `poison(target, amount, turns)` | 🧪 中毒：目標每回合開始受到 `amount` 傷害，持續 `turns` 回合；**無視護盾**，多次施放會疊成好幾層 | `amount × turns` | — |
+| `shield(target, amount)` | 🛡️ 護盾：受到傷害時先扣護盾 | `amount` | 每隻最多 10 點 |
+| `drain(target, amount)` | 🔥 吸血：造成 `amount` 傷害，自己回復**實際造成的傷害**那麼多血 | `amount × 2` | 每次 1–5 |
+| `curse(target, amount)` | 💀 詛咒：目標下一次受傷時傷害 +`amount`；好幾個詛咒會加總，觸發一次就全部用掉 | `amount` | — |
+| `say(text)` | 在戰鬥紀錄說一句話 | 免費 | — |
 
+- 除了 `say`，API 都會回傳 `bool`：`true` 代表生效，能量不足或目標已經倒下等情況回傳 `false`
+- 流派 API（`poison`、`shield`、`drain`、`curse`）的能量是**同流派**的價格，不同流派要兩倍
 - 每隻角色在**每個事件裡最多呼叫 3 次** API
 - 技能造成的傷害會觸發對方的 `on_hurt`，連鎖最多 3 層
 - 超出範圍的數值會被自動限制，戰鬥紀錄會用橘字提醒
@@ -235,6 +291,10 @@ func on_attack(target: Unit) -> void:
 | `get_units_in_row(row, enemy)` | 某一排還活著的角色，由左到右；`enemy` 為 `true` 查敵方 |
 | `get_units_in_column(col, enemy)` | 某一行還活著的角色，由前排到後排 |
 | `get_role()` | 職業名稱，例如 `"射手"` |
+| `get_energy()` | 現在能用的能量（`on_death` 裡包含靈魂能量） |
+| `get_school_count(school)` | 自己隊伍開場時有幾隻這個流派的角色 |
+| `get_poison_stacks()` | 身上有幾層中毒（查別人：`target.get_poison_stacks()`） |
+| `energy`、`shield_points`、`curse_points` | 能量、護盾、身上累積的詛咒（唯讀） |
 | `get_round()` | 現在第幾回合 |
 | `is_alive()` | 是否還活著 |
 | `random_int(a, b)`、`random_pick(array)` | 固定種子的隨機 |
@@ -266,7 +326,8 @@ func on_frame(delta: float) -> void:
 - `set()`、`call()` 這類方法，或任何 `_framework` 開頭的東西
 - `randi()`、`randf()`、`shuffle()` 等內建隨機：請用 `random_int()` / `random_pick()`
 - `queue_free()`、`add_child()` 等新增或刪除節點的方法
-- 在 `_init()` 以外改 `hp`、`max_hp`、`attack`、`grid_position`（包括 `enemy.hp = 0`）：戰鬥中請用 `deal_damage()`、`heal()`、`buff_attack()`
+- 在 `_init()` 以外改 `hp`、`max_hp`、`attack`、`grid_position`、`school`（包括 `enemy.hp = 0`）：戰鬥中請用 `deal_damage()`、`heal()`、`buff_attack()`
+- 改 `energy`、`energy_regen`、`shield_points`、`curse_points`（連 `_init()` 裡也不行）：護盾請用 `shield()`、詛咒請用 `curse()`
 - 三個引號的多行字串
 - 繼承 `Boss`
 
@@ -351,6 +412,18 @@ godot --headless --script res://framework/simulate.gd -- 帳號A vs 帳號B   # 
 
   一隊沒通過檢查時，另一隊不戰而勝；兩隊都沒通過時 `winner` 是空字串，結束代碼為 `1`
 
+### 流派平衡測試
+
+讓隊伍兩兩對戰、每個組合打 100 場（每場用不同的種子決定先手），印出勝率矩陣，並標出整體勝率超過 65% 或低於 35% 的隊伍：
+
+```sh
+godot --headless --script res://tools/balance.gd                          # 四個流派範例
+godot --headless --script res://tools/balance.gd -- 帳號A 帳號B 帳號C      # 指定隊伍
+godot --headless --script res://tools/balance.gd -- --games=200
+```
+
+隊伍沒用 `random_int()` 的話，同一組對戰只會有「A 先手」「B 先手」兩種結果，勝率會落在 0%、50%、100% 附近。
+
 ## 專案結構
 
 ```
@@ -368,10 +441,12 @@ godot --headless --script res://framework/simulate.gd -- 帳號A vs 帳號B   # 
 │   ├── matches.gd            ← 擂台賽對戰組合（講師用）
 │   └── simulate.gd           ← 無畫面模擬
 ├── tools/validate.gd         ← 隊伍檢查（本機和 GitHub Actions 共用）
+├── tools/balance.gd          ← 流派平衡測試
 ├── .github/workflows/        ← PR 自動檢查
 ├── bosses/<代號>/boss.gd     ← Boss
 └── teams/
     ├── example/              ← 範例隊伍，每種職業都有
+    ├── example_<流派>/       ← 四個流派的範例隊伍（venom、aegis、blood、necro）
     └── <你的 GitHub 帳號>/   ← 你只需要改這裡
         └── team.gd           ← 隊名、帳號、成員
 ```
