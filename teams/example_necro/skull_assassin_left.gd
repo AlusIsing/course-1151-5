@@ -1,5 +1,5 @@
 extends Assassin
-## 骷髏刺客（死靈）：衝去打後排；死的時候詛咒後排再補刀。
+## 骷髏刺客（死靈）：衝去打後排，平常把能量存著；死的時候詛咒後排再補刀。
 ## 花費 = 7 + 2 × 4 = 15 點
 
 
@@ -10,11 +10,6 @@ func _init() -> void:
 	color = Color("#757575")
 	grid_position = Vector2i(0, 0)   # 前排左
 	school = School.NECRO
-
-
-func on_attack(target: Unit) -> void:
-	if target.is_alive() and get_energy() >= 6:
-		curse(target, 3)
 
 
 func on_death() -> void:

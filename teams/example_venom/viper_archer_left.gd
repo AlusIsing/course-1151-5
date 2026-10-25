@@ -1,6 +1,6 @@
 extends Archer
 ## 毒蛇射手（劇毒）：每次攻擊後幫目標疊一層毒（1 傷 × 3 回合，花 3 能量）。
-## 挑目標：中毒層數最少的敵人，一樣少就打血少的。
+## 挑目標：中毒層數最少的敵人，一樣少就隨機挑（用 random_pick，結果由種子決定）。
 ## 花費 = 10 + 2 × 2 = 14 點
 
 
@@ -14,13 +14,19 @@ func _init() -> void:
 
 
 func choose_target(enemies: Array[Unit]) -> Unit:
-	var best: Unit = enemies[0]
+	var fewest: int = 999
 	for enemy: Unit in enemies:
-		if enemy.get_poison_stacks() < best.get_poison_stacks() \
-				or (enemy.get_poison_stacks() == best.get_poison_stacks() and enemy.hp < best.hp):
-			best = enemy
-	return best
+		fewest = mini(fewest, enemy.get_poison_stacks())
+	var candidates: Array[Unit] = []
+	for enemy: Unit in enemies:
+		if enemy.get_poison_stacks() == fewest:
+			candidates.append(enemy)
+	return random_pick(candidates)
 
 
 func on_attack(target: Unit) -> void:
-	poison(target, 1, 3)
+	# 毒持續 3 回合；能量有 6 點就下 2 點的毒，把能量用完
+	if get_energy() >= 6:
+		poison(target, 2, 3)
+	elif get_energy() >= 3:
+		poison(target, 1, 3)
