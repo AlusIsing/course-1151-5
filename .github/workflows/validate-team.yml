@@ -1,0 +1,96 @@
+# 檢查學員從 fork 發來的 PR：只改自己的資料夾、程式碼掃描、語法、隊伍設定、試打 Lv1。
+# 檢查邏輯都在 tools/validate.gd，學員可以在自己電腦上跑一樣的檢查。
+#
+# 安全：
+# - 只用 pull_request 觸發（不用 pull_request_target），fork 的 PR 拿不到 secrets，token 只有唯讀
+# - 第一次發 PR 的 fork 要講師在 PR 頁面按「Approve and run」才會執行
+# - 匯入專案前先擋 @tool，避免學員的程式在 Godot 編輯器模式裡執行
+# - 注意：pull_request 跑的是 PR 裡的 workflow 和 tools/validate.gd，學員可以改它們讓檢查通過，
+#   但「只修改自己的資料夾」那一項會在 job summary 列出來，合併前請確認 Files changed 只有 teams/<帳號>/
+
+name: 檢查學員隊伍
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-team-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: 4.7.2
+  GODOT_SHA512: 9aa00f7a605200940bce3027a567b782f49bd8e940dd06ae9e987bd65aee1b1467edd56ed84fcdcbdd44354bf613bdbb4e5d2913e925850368e150c59ed54c65
+
+jobs:
+  validate:
+    # 只檢查從 fork 發來的 PR（講師自己在本 repo 開的分支不用）
+    if: github.event.pull_request.head.repo.fork
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TEAM: ${{ github.event.pull_request.user.login }}
+    steps:
+      - name: 取出 PR 的程式碼
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: 列出 PR 改到的檔案
+        # checkout 出來的是 PR 合併後的 commit，第一個 parent 就是目前的 main
+        run: git diff --name-status --no-renames HEAD^1 HEAD | tee "$RUNNER_TEMP/changed.txt"
+
+      - name: 匯入專案前先擋 @tool
+        run: |
+          if grep -rnE '^\s*@tool\b' --include='*.gd' . > "$RUNNER_TEMP/tool.txt"; then
+            {
+              echo "## ❌ 隊伍檢查：\`$TEAM\`"
+              echo
+              echo "下面的檔案用了 \`@tool\`（打開專案時就會在 Godot 編輯器裡執行），請刪掉這一行："
+              echo
+              sed 's/^/- /' "$RUNNER_TEMP/tool.txt"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+      - name: 快取 Godot
+        id: cache-godot
+        uses: actions/cache@v4
+        with:
+          path: ~/godot
+          key: godot-${{ env.GODOT_VERSION }}-linux-x86_64
+
+      - name: 下載 Godot ${{ env.GODOT_VERSION }}
+        if: steps.cache-godot.outputs.cache-hit != 'true'
+        run: |
+          zip="Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          curl -fsSL -o "$RUNNER_TEMP/$zip" \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/$zip"
+          echo "$GODOT_SHA512  $RUNNER_TEMP/$zip" | sha512sum --check
+          mkdir -p ~/godot
+          unzip -q "$RUNNER_TEMP/$zip" -d ~/godot
+          mv ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64 ~/godot/godot
+          chmod +x ~/godot/godot
+
+      - name: 匯入專案
+        # 建立 class_name 快取（Unit、Team、Archer…），--script 模式才找得到這些類別
+        run: timeout 300 ~/godot/godot --headless --import || true
+
+      - name: 檢查隊伍
+        run: |
+          set +e
+          timeout 600 ~/godot/godot --headless --script res://tools/validate.gd -- "$TEAM" \
+            --changed="$RUNNER_TEMP/changed.txt" --summary="$GITHUB_STEP_SUMMARY"
+          code=$?
+          if [ "$code" -eq 124 ]; then
+            {
+              echo "## ❌ 隊伍檢查：\`$TEAM\`"
+              echo
+              echo "檢查超過 10 分鐘還沒結束，通常是技能裡有無窮迴圈（例如 \`while true\`，或條件永遠成立的 \`while\`）。"
+              echo "請在自己電腦上跑 \`godot --headless --script res://tools/validate.gd -- $TEAM\` 找出卡住的地方。"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$code"
