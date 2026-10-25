@@ -9,6 +9,7 @@ var charging := false
 
 
 func _init() -> void:
+	super()
 	unit_name = "雷神"
 	max_hp = 120
 	attack = 5

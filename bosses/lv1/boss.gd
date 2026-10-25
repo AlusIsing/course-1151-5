@@ -5,6 +5,7 @@ extends Boss
 
 
 func _init() -> void:
+	super()
 	unit_name = "史萊姆王"
 	max_hp = 80
 	attack = 4
