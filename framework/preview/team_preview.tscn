@@ -1,0 +1,152 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://framework/preview/team_preview.gd" id="1_preview"]
+
+[node name="TeamPreview" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_preview")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.11, 0.12, 0.16, 1)
+
+[node name="Margin" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 12
+
+[node name="VBox" type="VBoxContainer" parent="Margin"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="TopBar" type="HBoxContainer" parent="Margin/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="TeamText" type="Label" parent="Margin/VBox/TopBar"]
+layout_mode = 2
+text = "隊伍"
+
+[node name="TeamSelect" type="OptionButton" parent="Margin/VBox/TopBar"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(160, 0)
+layout_mode = 2
+
+[node name="ReloadButton" type="Button" parent="Margin/VBox/TopBar"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "改完程式後按這裡（切回遊戲視窗也會自動重新讀取）"
+text = "重新讀取"
+
+[node name="BossText" type="Label" parent="Margin/VBox/TopBar"]
+layout_mode = 2
+text = "　挑戰"
+
+[node name="BossSelect" type="OptionButton" parent="Margin/VBox/TopBar"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(160, 0)
+layout_mode = 2
+
+[node name="Spacer" type="Control" parent="Margin/VBox/TopBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Budget" type="Label" parent="Margin/VBox/TopBar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "預算"
+
+[node name="TryButton" type="Button" parent="Margin/VBox/TopBar"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(72, 0)
+layout_mode = 2
+text = "試打"
+
+[node name="TournamentButton" type="Button" parent="Margin/VBox/TopBar"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "依照 framework/matches.gd 開打（講師用）"
+text = "擂台賽"
+
+[node name="Body" type="HBoxContainer" parent="Margin/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 16
+
+[node name="Members" type="PanelContainer" parent="Margin/VBox/Body"]
+custom_minimum_size = Vector2(360, 0)
+layout_mode = 2
+
+[node name="MembersVBox" type="VBoxContainer" parent="Margin/VBox/Body/Members"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="TeamLabel" type="Label" parent="Margin/VBox/Body/Members/MembersVBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "隊伍"
+
+[node name="MemberScroll" type="ScrollContainer" parent="Margin/VBox/Body/Members/MembersVBox"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="MemberList" type="VBoxContainer" parent="Margin/VBox/Body/Members/MembersVBox/MemberScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="BoardArea" type="VBoxContainer" parent="Margin/VBox/Body"]
+layout_mode = 2
+size_flags_horizontal = 3
+alignment = 1
+
+[node name="EnemyHint" type="Label" parent="Margin/VBox/Body/BoardArea"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.54, 0.5, 0.8)
+text = "▲ 敵人在這個方向（前排面對敵人）"
+horizontal_alignment = 1
+
+[node name="BoardCenter" type="CenterContainer" parent="Margin/VBox/Body/BoardArea"]
+layout_mode = 2
+
+[node name="Board" type="GridContainer" parent="Margin/VBox/Body/BoardArea/BoardCenter"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
+columns = 4
+
+[node name="Status" type="RichTextLabel" parent="Margin/VBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 64)
+layout_mode = 2
+bbcode_enabled = true
+scroll_following = true
+
+[node name="Help" type="Label" parent="Margin/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 0.5)
+theme_override_font_sizes/font_size = 14
+text = "站位寫在角色的 _init() 裡：grid_position = Vector2i(行, 排)，行 0 左 / 1 中 / 2 右，排 0 前排 / 1 中排 / 2 後排。改完切回這個視窗就會更新。"
+autowrap_mode = 3

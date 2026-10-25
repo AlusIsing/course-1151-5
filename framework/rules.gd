@@ -6,6 +6,13 @@ const SEED := 1151
 const MAX_ROUNDS := 30
 const MAX_UNITS := 5
 
+# --- 棋盤：每方 3×3，row 0 前排 / 1 中排 / 2 後排，col 0 左 / 1 中 / 2 右 ---
+const GRID_ROWS := 3
+const GRID_COLS := 3
+const ROW_NAMES: Array[String] = ["前排", "中排", "後排"]
+const COL_NAMES: Array[String] = ["左", "中", "右"]
+const TANK_SHARE_PERCENT := 50  # 坦克替相鄰隊友分擔的傷害比例（無條件捨去）
+
 # --- 預算：cost = max_hp × HP_COST + attack × ATTACK_COST ---
 const BUDGET := 100
 const HP_COST := 1
@@ -24,14 +31,82 @@ const TOKEN_BUDGET := 10       # 每次 on_death 召喚的 token 總共 hp + 2×
 const CALLS_PER_EVENT := 3     # 每隻角色每個事件最多呼叫 3 次 API
 const MAX_EVENT_DEPTH := 3     # 事件連鎖最多 3 層
 
-const TEAM_PATH := "res://my_team/team.gd"
+# --- 能量：技能 API 要花能量，普攻和補師的普通治療免費（Boss 不用能量）---
+const ENERGY_START := 3        # 戰鬥開始時的能量
+const ENERGY_REGEN := 3        # 每回合開始回復
+const ENERGY_MAX := 6          # 最多累積
+const BUFF_ENERGY_PER_POINT := 2   # buff_attack 每加 1 攻擊花 2 能量（召喚 token 不花能量）
+
+# --- 流派：順序和 Unit.School 一樣（NONE、VENOM、AEGIS、BLOOD、NECRO）---
+const SCHOOL_NAMES: Array[String] = ["無", "劇毒", "聖盾", "狂血", "死靈"]
+const SCHOOL_ICONS: Array[String] = ["", "🧪", "🛡️", "🔥", "💀"]
+const SCHOOL_TIERS: Array[int] = [2, 4]   # 開場時同流派幾隻啟動加成
+const OFF_SCHOOL_COST := 2     # 用別的流派的 API（包含沒有流派）要花兩倍能量
+const SHIELD_MAX := 10         # 每隻角色的護盾上限
+# 下面這些數值用 tools/balance.gd 調過（規格原本是：毒傷 +1、聖盾 4 隻 6 點、靈魂能量 5 點）
+const VENOM_TICK_BONUS := 2    # 劇毒 2 隻：我方施加的毒傷每回合 +2
+const AEGIS_SHIELD: Array[int] = [3, 4]   # 聖盾 2 隻 / 4 隻的開場護盾（不疊加）
+const BLOOD_LIFESTEAL := 1     # 狂血 2 隻：普攻命中後回血
+const BLOOD_FURY := 2          # 狂血 4 隻：血量低於一半時普攻 +2
+const NECRO_SOUL := 6          # 死靈 2 隻：on_death 期間可用的靈魂能量
+const NECRO_BLAST := 1         # 死靈 4 隻：死亡時對全體敵人的傷害
+
+
+## 流派加成的說明，[2 隻的效果, 4 隻的效果]，數字直接讀上面的常數
+static func school_bonus_text(school: int) -> Array[String]:
+	match school:
+		1:
+			return ["我方施加的毒傷每回合 +%d" % VENOM_TICK_BONUS, "中毒的敵人無法被治療"]
+		2:
+			return ["開場全隊獲得 %d 點護盾" % AEGIS_SHIELD[0], "開場全隊獲得 %d 點護盾" % AEGIS_SHIELD[1]]
+		3:
+			return ["普通攻擊命中後回復 %d 血" % BLOOD_LIFESTEAL, "血量低於一半時攻擊 +%d" % BLOOD_FURY]
+		4:
+			return ["死靈角色死亡時獲得 %d 點靈魂能量" % NECRO_SOUL, "死靈角色死亡時對全體敵人造成 %d 點傷害" % NECRO_BLAST]
+	return []
+
+const TEAMS_DIR := "res://teams"      # 每個人一個資料夾，用 GitHub 帳號命名
+const DEFAULT_TEAM := "example"
+const DEFAULT_BOSS := "dummy"
+const PREVIEW_SCENE := "res://framework/preview/team_preview.tscn"
+const ARENA_SCENE := "res://framework/arena_screen.tscn"
+const MATCHES_PATH := "res://framework/matches.gd"
 const BOSSES := {
-	"dummy": "res://bosses/dummy.gd",
-	"lv1": "res://bosses/boss_lv1.gd",
-	"lv2": "res://bosses/boss_lv2.gd",
-	"lv3": "res://bosses/boss_lv3.gd",
+	"dummy": "res://bosses/dummy/boss.gd",
+	"lv1": "res://bosses/lv1/boss.gd",
+	"lv2": "res://bosses/lv2/boss.gd",
+	"lv3": "res://bosses/lv3/boss.gd",
 }
 
 
 static func unit_cost(max_hp: int, attack: int) -> int:
 	return max_hp * HP_COST + attack * ATTACK_COST
+
+
+static func team_dir(github: String) -> String:
+	return "%s/%s" % [TEAMS_DIR, github]
+
+
+static func is_valid_cell(cell: Vector2i) -> bool:
+	return cell.x >= 0 and cell.x < GRID_COLS and cell.y >= 0 and cell.y < GRID_ROWS
+
+
+## 格子名稱，例如 Vector2i(0, 0) →「前排左」
+static func cell_name(cell: Vector2i) -> String:
+	if not is_valid_cell(cell):
+		return "場外"
+	return ROW_NAMES[cell.y] + COL_NAMES[cell.x]
+
+
+## 流派加成的等級：0 沒有、1 是 2 隻加成、2 是 4 隻加成
+static func school_tier(count: int) -> int:
+	var tier: int = 0
+	for need: int in SCHOOL_TIERS:
+		if count >= need:
+			tier += 1
+	return tier
+
+
+## 行動順序：前排 → 後排，同一排由左到右
+static func cell_order(cell: Vector2i) -> int:
+	return cell.y * GRID_COLS + cell.x
