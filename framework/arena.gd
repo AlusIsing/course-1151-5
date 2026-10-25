@@ -10,8 +10,8 @@ const ACTION_GAP: float = 0.16    # 同一回合裡，每隻角色行動之間�
 const BOARD_X: float = 320.0      # 棋盤中心的 x
 const BOARD_TOP: float = 56.0
 const CELL_W: float = 180.0
-const ROW_H: float = 88.0
-const MID_GAP: float = 24.0       # 兩個棋盤中間的空隙
+const ROW_H: float = 84.0
+const MID_GAP: float = 40.0       # 兩個棋盤中間的空隙（下半部隊伍的流派加成寫在這裡）
 const UNIT_SCALE: float = 0.62
 const LUNGE: float = 26.0         # 攻擊時往目標衝多遠
 const COMPACT_LINES: int = 8      # compact 模式顯示幾行戰鬥紀錄
@@ -84,6 +84,7 @@ func _start(new_battle: Battle) -> void:
 			_add_holder(unit)
 	_fx_delay = 0.0
 	battle.start()
+	queue_redraw()
 
 
 func set_compact(value: bool) -> void:
@@ -121,6 +122,21 @@ func _draw() -> void:
 			draw_string(font, Vector2(8.0, y + 5.0), Rules.ROW_NAMES[row], HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(1, 1, 1, 0.35))
 	var mid_y: float = BOARD_TOP + ROW_H * Rules.GRID_ROWS + MID_GAP / 2.0
 	draw_line(Vector2(40.0, mid_y), Vector2(BOARD_X * 2.0 - 10.0, mid_y), Color(1, 1, 1, 0.12), 2.0)
+
+	# 每隊棋盤上方：啟動中的流派加成，例如「🧪 劇毒 2/4」
+	if battle == null:
+		return
+	for team: int in [Battle.PLAYER, Battle.ENEMY]:
+		var parts: Array[String] = []
+		for school: int in range(1, Rules.SCHOOL_NAMES.size()):
+			if battle.school_tier(team, school) > 0:
+				parts.append("%s %s %d/%d" % [Rules.SCHOOL_ICONS[school], Rules.SCHOOL_NAMES[school],
+						battle.school_count(team, school), Rules.SCHOOL_TIERS[-1]])
+		if parts.is_empty():
+			continue
+		var top: float = cell_position(team, Vector2i(0, Rules.GRID_ROWS - 1 if team == Battle.ENEMY else 0)).y - ROW_H / 2.0
+		draw_string(font, Vector2(40.0, top - 6.0), "　".join(parts), HORIZONTAL_ALIGNMENT_RIGHT,
+				BOARD_X * 2.0 - 50.0, 15, Color(Battle.TEAM_COLORS[team]))
 
 
 ## 格子在畫面上的中心點

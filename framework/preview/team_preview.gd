@@ -11,6 +11,7 @@ class UnitInfo:
 	var max_hp: int
 	var attack: int
 	var cost: int
+	var school: int
 	var color: Color
 	var cell: Vector2i
 
@@ -127,6 +128,7 @@ func _info(script: Script) -> UnitInfo:
 		info.max_hp = unit.max_hp
 		info.attack = unit.attack
 		info.cost = Rules.unit_cost(unit.max_hp, unit.attack)
+		info.school = clampi(unit.school, 0, Rules.SCHOOL_NAMES.size() - 1)
 		info.color = unit.color
 		info.cell = unit.grid_position
 	if instance is Node:
@@ -197,7 +199,7 @@ func _show(title: String, errors: Array[String]) -> void:
 		else:
 			style.bg_color = info.color.darkened(0.6)
 			style.border_color = info.color
-			label.text = "%s\n%s　攻 %d　血 %d\n%d 點" % [info.name, info.role, info.attack, info.max_hp, info.cost]
+			label.text = "%s%s\n%s　攻 %d　血 %d\n%d 點" % [_icon(info.school), info.name, info.role, info.attack, info.max_hp, info.cost]
 			label.add_theme_color_override("font_color", Color.WHITE)
 		(label.get_parent() as PanelContainer).add_theme_stylebox_override("panel", style)
 
@@ -205,9 +207,20 @@ func _show(title: String, errors: Array[String]) -> void:
 	for child: Node in member_list.get_children():
 		child.queue_free()
 	var total: int = 0
+	var schools: Array[int] = []
+	schools.resize(Rules.SCHOOL_NAMES.size())
 	for info: UnitInfo in units:
 		total += info.cost
+		schools[info.school] += 1
 		member_list.add_child(_member_entry(info))
+	var school_parts: Array[String] = []
+	for school: int in range(1, schools.size()):
+		if schools[school] > 0:
+			var active: String = "（啟動）" if Rules.school_tier(schools[school]) > 0 else ""
+			school_parts.append("%s%s %d/%d%s" % [_icon(school), Rules.SCHOOL_NAMES[school], schools[school],
+					Rules.SCHOOL_TIERS[-1], active])
+	if not school_parts.is_empty():
+		team_label.text = "%s\n%s" % [title, "　".join(school_parts)]
 
 	var over: bool = total > Rules.BUDGET or units.size() > Rules.MAX_UNITS
 	budget_label.text = "預算 %d / %d　　角色 %d / %d" % [total, Rules.BUDGET, units.size(), Rules.MAX_UNITS]
@@ -233,7 +246,12 @@ func _member_entry(info: UnitInfo) -> Control:
 	style.set_content_margin_all(8.0)
 	panel.add_theme_stylebox_override("panel", style)
 	var label: Label = Label.new()
-	label.text = "%s（%s）　%s\n攻 %d　血 %d　花費 %d　　%s" % [info.name, info.role, Rules.cell_name(info.cell),
-			info.attack, info.max_hp, info.cost, info.path.get_file()]
+	label.text = "%s%s（%s）　%s\n攻 %d　血 %d　花費 %d　流派 %s　　%s" % [_icon(info.school), info.name, info.role,
+			Rules.cell_name(info.cell), info.attack, info.max_hp, info.cost, Rules.SCHOOL_NAMES[info.school], info.path.get_file()]
 	panel.add_child(label)
 	return panel
+
+
+## 流派圖示加一個空白；沒有流派是空字串
+func _icon(school: int) -> String:
+	return "" if school == 0 else Rules.SCHOOL_ICONS[school] + " "
