@@ -13,6 +13,11 @@ extends RefCounted
 ## 行動順序固定：玩家隊伍先、Boss 隊伍後；同一隊由前排到後排、每排由左到右。
 ## 輪到的時候血量已經歸零的角色不會行動。
 ##
+## 隊伍對戰（setup_versus）：
+##   - 先手由兩隊的 GitHub 帳號算出來，同一組對戰每次都一樣
+##   - 兩隊交錯行動：先手 1 → 後手 1 → 先手 2 → 後手 2 …，一隊沒人了另一隊就繼續
+##   - 同時全滅由後手獲勝；超過 MAX_ROUNDS 回合比剩餘血量比例，一樣也是後手獲勝
+##
 ## 職業的攻擊目標（「最前排」指還有活著角色的最前面一排）：
 ##   戰士、坦克：敵方最前排，優先同一行，沒有就打最近的一行（一樣近打左邊）
 ##   刺客：敵方最後排，規則同上
@@ -40,8 +45,12 @@ const TEAM_COLORS := ["#7cc4ff", "#ff8a80"]
 var teams: Array = [[], []]   # 兩隊還在場上的角色（Array of Unit），照行動順序排
 var roster: Array[Unit] = []  # 這場戰鬥出現過的所有角色（包含陣亡的）
 var round_number := 0
-var result := ""              # "" 進行中 / "win" / "lose"
+var result := ""              # "" 進行中 / "win"（左邊、玩家贏）/ "lose"
 var result_reason := ""
+var winner := -1              # 贏的那隊 PLAYER / ENEMY；-1 進行中
+var versus := false           # true：隊伍對戰
+var first_team := PLAYER      # 對戰時的先手
+var side_names: Array[String] = ["我方", "Boss"]
 var rng := RandomNumberGenerator.new()
 
 # 目前正在執行事件的角色；戰鬥 API 只接受它呼叫
@@ -51,6 +60,7 @@ var _calls_left := 0
 var _depth := 0
 var _tokens := {}         # 死亡的角色 -> 牠召喚的 token 陣列
 var _token_budget := {}   # 死亡的角色 -> 剩下的 token 預算
+var _start_max_hp := [0, 0]  # 開場時兩隊的 max_hp 總和，比剩餘血量用
 
 
 ## 兩隊的角色腳本，每隻站在自己 grid_position 那一格；要先通過 Validator 檢查
@@ -63,12 +73,33 @@ func _init(player_scripts: Array[Script], enemy_scripts: Array[Script]) -> void:
 	for script: Script in enemy_scripts:
 		var unit: Unit = script.new()
 		_add_unit(unit, ENEMY, unit.grid_position)
+	for unit: Unit in roster:
+		_start_max_hp[unit._framework_team] += unit.max_hp
+
+
+## 改成隊伍對戰；要在 start() 之前呼叫。left 是 PLAYER 那隊、right 是 ENEMY 那隊
+func setup_versus(left_github: String, right_github: String) -> void:
+	versus = true
+	side_names = [left_github, right_github]
+	first_team = first_mover(left_github, right_github)
+
+
+## 用兩隊的帳號決定先手：左右交換結果也一樣，同一組對戰永遠同一隊先手
+static func first_mover(left_github: String, right_github: String) -> int:
+	if left_github == right_github:
+		return PLAYER
+	var names: Array[String] = [left_github, right_github]
+	names.sort()
+	var picked: String = names[absi(("%s|%s" % names).hash()) % 2]
+	return PLAYER if picked == left_github else ENEMY
 
 
 # ---------------------------------------------------------------- 流程
 
 func start() -> void:
 	_log("[b]=== 戰鬥開始（種子 %d）===[/b]" % Rules.SEED)
+	if versus:
+		_log("[b]先手：%s[/b]" % _side(first_team))
 	for unit: Unit in _all_alive():
 		_fire(unit, "on_battle_start", [])
 	_resolve_deaths()
@@ -88,12 +119,27 @@ func step() -> void:
 	if _check_end():
 		return
 
-	for unit: Unit in _all_alive():
+	for unit: Unit in _turn_order():
 		if unit.is_alive():
 			_act(unit)
 
 	_resolve_deaths()
 	_check_end()
+
+
+## 這回合的行動順序（回合開始時還活著的角色）
+func _turn_order() -> Array[Unit]:
+	if not versus:
+		return _all_alive()
+	var first: Array[Unit] = get_alive(first_team)
+	var second: Array[Unit] = get_alive(1 - first_team)
+	var order: Array[Unit] = []
+	for i: int in maxi(first.size(), second.size()):
+		if i < first.size():
+			order.append(first[i])
+		if i < second.size():
+			order.append(second[i])
+	return order
 
 
 func _act(unit: Unit) -> void:
@@ -228,24 +274,58 @@ func _free_cell_near(team: int, origin: Vector2i) -> Vector2i:
 
 
 func _check_end() -> bool:
+	if versus:
+		return _check_versus_end()
 	var players := get_alive(PLAYER).size()
 	var enemies := get_alive(ENEMY).size()
 	if players == 0 and enemies == 0:
-		_finish("lose", "同歸於盡，算挑戰者輸")
+		_finish(ENEMY, "同歸於盡，算挑戰者輸")
 	elif enemies == 0:
-		_finish("win", "擊敗了 Boss！")
+		_finish(PLAYER, "擊敗了 Boss！")
 	elif players == 0:
-		_finish("lose", "全隊陣亡")
+		_finish(ENEMY, "全隊陣亡")
 	elif round_number >= Rules.MAX_ROUNDS:
-		_finish("lose", "超過 %d 回合還沒打倒 Boss" % Rules.MAX_ROUNDS)
+		_finish(ENEMY, "超過 %d 回合還沒打倒 Boss" % Rules.MAX_ROUNDS)
 	return result != ""
 
 
-func _finish(new_result: String, reason: String) -> void:
-	result = new_result
+func _check_versus_end() -> bool:
+	var second: int = 1 - first_team
+	var alive: Array[int] = [get_alive(PLAYER).size(), get_alive(ENEMY).size()]
+	if alive[PLAYER] == 0 and alive[ENEMY] == 0:
+		_finish(second, "同時全滅，後手獲勝")
+	elif alive[ENEMY] == 0:
+		_finish(PLAYER, "%s 全滅" % side_names[ENEMY])
+	elif alive[PLAYER] == 0:
+		_finish(ENEMY, "%s 全滅" % side_names[PLAYER])
+	elif round_number >= Rules.MAX_ROUNDS:
+		var ratios: Array[float] = [hp_ratio(PLAYER), hp_ratio(ENEMY)]
+		var reason: String = "超過 %d 回合，比剩餘血量：%s %d%%、%s %d%%" % [Rules.MAX_ROUNDS,
+				side_names[PLAYER], roundi(ratios[PLAYER] * 100.0), side_names[ENEMY], roundi(ratios[ENEMY] * 100.0)]
+		if is_equal_approx(ratios[PLAYER], ratios[ENEMY]):
+			_finish(second, reason + "，一樣多由後手獲勝")
+		else:
+			_finish(PLAYER if ratios[PLAYER] > ratios[ENEMY] else ENEMY, reason)
+	return result != ""
+
+
+## 剩餘血量比例：還活著的角色目前血量總和 ÷ 開場時的 max_hp 總和
+func hp_ratio(team: int) -> float:
+	var total: int = 0
+	for unit: Unit in get_alive(team):
+		total += unit.hp
+	return float(total) / maxf(1.0, _start_max_hp[team])
+
+
+func _finish(new_winner: int, reason: String) -> void:
+	winner = new_winner
+	result = "win" if winner == PLAYER else "lose"
 	result_reason = reason
-	var title := "勝利" if result == "win" else "落敗"
-	_log("[b]=== %s：%s（第 %d 回合）===[/b]" % [title, reason, round_number])
+	if versus:
+		_log("[b]=== %s 獲勝：%s（第 %d 回合）===[/b]" % [_side(winner), reason, round_number])
+	else:
+		var title := "勝利" if result == "win" else "落敗"
+		_log("[b]=== %s：%s（第 %d 回合）===[/b]" % [title, reason, round_number])
 	finished.emit(result)
 
 
@@ -486,6 +566,10 @@ func _write(unit: Unit, property: StringName, value: Variant) -> void:
 	unit._framework_writing = true
 	unit.set(property, value)
 	unit._framework_writing = false
+
+
+func _side(team: int) -> String:
+	return "[color=%s]%s[/color]" % [TEAM_COLORS[team], side_names[team]]
 
 
 ## 戰鬥紀錄裡的名字，例如「[前排左] 騎士」
