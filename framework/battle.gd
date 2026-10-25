@@ -178,9 +178,9 @@ func _start_schools(team: int) -> void:
 		var tier: int = school_tier(team, school)
 		if tier == 0:
 			continue
-		var effects: Array = Rules.SCHOOL_BONUS_TEXT[school].slice(0, tier)
+		var effects: Array[String] = Rules.school_bonus_text(school).slice(0, tier)
 		if school == Unit.School.AEGIS:
-			effects = [Rules.SCHOOL_BONUS_TEXT[school][tier - 1]]   # 聖盾 4 隻取代 2 隻的效果
+			effects = [Rules.school_bonus_text(school)[tier - 1]]   # 聖盾 4 隻取代 2 隻的效果
 		parts.append("%s%s %d 隻（%s）" % [Rules.SCHOOL_ICONS[school], Rules.SCHOOL_NAMES[school],
 				school_count(team, school), "、".join(effects)])
 	if parts.is_empty():
@@ -510,7 +510,7 @@ func _heal_blocked(unit: Unit) -> bool:
 	return false
 
 
-## 每層毒各算一次傷害（無視護盾）；劇毒 2 隻的隊伍下的毒每次 +1
+## 每層毒各算一次傷害（無視護盾）；劇毒 2 隻的隊伍下的毒每次 +VENOM_TICK_BONUS
 func _tick_poison(unit: Unit) -> void:
 	for stack: Dictionary in unit._framework_poisons.duplicate():
 		if not unit.is_alive():
