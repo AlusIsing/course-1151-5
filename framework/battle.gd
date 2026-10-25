@@ -249,6 +249,8 @@ func _act(unit: Unit) -> void:
 	if unit.is_alive():
 		_fire(unit, "on_attack", [targets[0]])
 	for entry: Array in hurt:
+		if entry[0] is Boss and entry[0].is_alive():
+			_fire(entry[0], "on_attacked", [entry[1], unit])
 		if entry[0].is_alive():
 			_fire(entry[0], "on_hurt", [entry[1], unit])
 
@@ -463,6 +465,8 @@ func _apply_damage(target: Unit, amount: int, source: Unit, verb: String, kind: 
 		amount += Rules.BLOOD_FURY
 	var boss := target as Boss
 	if boss:
+		if kind == KIND_ATTACK and boss.attack_damage_percent != 100:
+			amount = amount * boss.attack_damage_percent / 100
 		amount *= boss.damage_taken_multiplier
 	# 3. 詛咒
 	if target.curse_points > 0:

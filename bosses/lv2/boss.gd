@@ -1,8 +1,9 @@
 extends Boss
 ## Lv2 刺甲龜
 ## HP 70 / ATK 4
-## 能力「尖刺」：每次受到傷害，把一半的傷害（無條件捨去）反彈給攻擊牠的角色。
-##             技能造成的傷害也會被反彈。
+## 能力「尖刺」：被普攻打中時，把那次傷害全額反彈給攻擊牠的角色。
+##             技能、毒造成的傷害不會被反彈。
+## 弱點：用技能打牠（deal_damage、poison……）。
 
 
 func _init() -> void:
@@ -13,7 +14,7 @@ func _init() -> void:
 	color = Color("#5d8a66")
 
 
-func on_hurt(amount: int, source: Unit) -> void:
-	var reflected := floori(amount / 2.0)
-	if reflected > 0 and source != null and source != self and source.is_alive():
-		deal_damage(source, reflected)
+func on_attacked(amount: int, attacker: Unit) -> void:
+	if amount > 0 and attacker != null and attacker.is_alive():
+		say("尖刺！")
+		deal_damage(attacker, amount)

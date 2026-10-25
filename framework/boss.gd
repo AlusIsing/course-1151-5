@@ -9,6 +9,7 @@ var skip_attack := false            # true：這回合不普攻
 var pierce := false                 # true：這回合普攻打整排
 var pierce_damage := 0              # 打整排時每隻受到的傷害
 var damage_taken_multiplier := 1    # 受到的傷害倍率
+var attack_damage_percent := 100    # 被普攻打到時只受到幾 %（無條件捨去），技能和毒不受影響
 
 
 func _init() -> void:
@@ -19,3 +20,6 @@ func _init() -> void:
 
 ## 每回合開始、攻擊之前呼叫
 func on_round_start(_round_number: int) -> void: pass
+
+## 被普攻打中時呼叫（技能、毒傷不算），在 on_hurt 之前
+func on_attacked(_amount: int, _attacker: Unit) -> void: pass
