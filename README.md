@@ -339,14 +339,20 @@ func on_frame(delta: float) -> void:
 
 Boss 也站在 3×3 棋盤上，預設站**前排中**，行為和戰士一樣（打你的最前排、優先同一行）。雷神的「雷擊」會打中你**所有**角色。
 
-| 代號 | 名稱 |
-|---|---|
-| `dummy` | 木樁（練習用） |
-| `lv1` | 史萊姆王 |
-| `lv2` | 刺甲龜 |
-| `lv3` | 雷神 |
+| 代號 | 名稱 | 能力 | 適合 |
+|---|---|---|---|
+| `dummy` | 木樁 | 不會反擊，練習看戰鬥紀錄 | 階段 1 |
+| `lv1` | 史萊姆王 | 沒有能力，就是一個大血包 | 階段 1：只靠數值和站位就打得贏 |
+| `lv2` | 刺甲龜 | 被**普攻**打中會把傷害**全額反彈**；技能和毒不會被反彈 | 階段 2：要用技能打 |
+| `lv3` | 雷神 | 平常普攻只造成**一半**傷害；每 3 回合蓄力一次（不攻擊、受傷 ×2），下一回合雷擊打中你所有角色 | 階段 2：把能量留到蓄力回合，還要撐過雷擊 |
 
-打輸了就看戰鬥紀錄，調整站位、數值或技能再試一次。
+Lv2、Lv3 是設計成**只調數值打不贏**的關卡，打輸了就看戰鬥紀錄，想想看要加什麼技能。
+
+講師可以用 `tools/boss_check.gd` 檢查 Boss 難度：它會產生上千支只有數值的隨機隊伍去打每隻 Boss，再讓同樣數值的隊伍加上基礎技能打一次：
+
+```sh
+godot --headless --script res://tools/boss_check.gd
+```
 
 ## 擂台賽
 
@@ -358,6 +364,14 @@ Boss 也站在 3×3 棋盤上，預設站**前排中**，行為和戰士一樣�
    ```sh
    godot --headless --script res://tools/validate.gd -- 你的GitHub帳號
    ```
+
+   這份 README 裡的 `godot` 指的是 Godot 執行檔，要在**專案資料夾**裡執行。沒有把 Godot 加進 PATH 的話，請換成完整路徑；Windows 要用檔名有 `console` 的那個，才看得到輸出：
+
+   ```powershell
+   & "C:\你放Godot的地方\Godot_v4.7.2-stable_win64_console.exe" --headless --script res://tools/validate.gd -- 你的GitHub帳號
+   ```
+
+   不在專案資料夾裡的話，在 `--headless` 後面加上 `--path "專案資料夾路徑"`。
 
 3. 發 PR，**只改自己的資料夾**
 
@@ -444,6 +458,7 @@ godot --headless --script res://tools/balance.gd -- --games=200
 │   └── simulate.gd           ← 無畫面模擬
 ├── tools/validate.gd         ← 隊伍檢查（本機和 GitHub Actions 共用）
 ├── tools/balance.gd          ← 流派平衡測試
+├── tools/boss_check.gd       ← Boss 難度檢查（純數值隊伍 vs 加上技能）
 ├── .github/workflows/        ← PR 自動檢查
 ├── bosses/<代號>/boss.gd     ← Boss
 └── teams/
