@@ -34,6 +34,8 @@ const BANNED := [
 		"學員的角色不能用 Boss 類別"],
 ]
 const FRAME_FORBIDDEN := r"\b(deal_damage|heal|buff_attack|summon_token|say)\s*\("
+# 指定 hp、max_hp、attack、grid_position（包含 enemy.hp = 0 這種）；== 是比較，不算
+const STAT_WRITE := r"(^|[^\w.])((?:\w+\.)*)(hp|max_hp|attack|grid_position)\s*([-+*/%]?=)(?!=)"
 
 
 ## 檢查 teams/<github>/：先掃描整個資料夾的程式碼，通過了才執行 team.gd 和角色的 _init()
@@ -155,8 +157,10 @@ static func check_source(path: String) -> Array[String]:
 		return errors
 
 	var lines := text.split("\n")
-	var frame_indent := -1    # >= 0 代表正在 on_frame 的函式本體裡
-	var func_regex := RegEx.create_from_string(r"^(\s*)func\s+(\w+)")
+	var func_name := ""       # 現在在哪個函式本體裡，"" 代表不在函式裡
+	var func_indent := -1
+	var func_regex := RegEx.create_from_string(r"^(\s*)(static\s+)?func\s+(\w+)")
+	var stat_regex := RegEx.create_from_string(STAT_WRITE)
 	var path_regex := RegEx.create_from_string(r"\b(preload|extends)\s*\(?\s*\"([^\"]*)\"")
 	# 學員的檔案只能用自己隊伍資料夾 teams/<帳號>/ 裡的東西
 	var team_root: String = Rules.team_dir(path.trim_prefix(Rules.TEAMS_DIR + "/").get_slice("/", 0))
@@ -166,11 +170,13 @@ static func check_source(path: String) -> Array[String]:
 		if code.strip_edges() == "":
 			continue
 		var indent := code.length() - code.lstrip(" \t").length()
-		if frame_indent >= 0 and indent <= frame_indent:
-			frame_indent = -1
+		if func_indent >= 0 and indent <= func_indent:
+			func_name = ""
+			func_indent = -1
 		var func_match := func_regex.search(code)
-		if func_match and func_match.get_string(2) == "on_frame":
-			frame_indent = func_match.get_string(1).length()
+		if func_match:
+			func_name = func_match.get_string(3)
+			func_indent = func_match.get_string(1).length()
 
 		var where := "%s 第 %d 行" % [_short(path), i + 1]
 		for rule in BANNED:
@@ -188,8 +194,16 @@ static func check_source(path: String) -> Array[String]:
 					else path.get_base_dir().path_join(target).simplify_path()
 			if not resolved.begins_with(team_root + "/"):
 				errors.append("%s：只能用自己資料夾 %s/ 裡的檔案，不能用 %s" % [where, _short(team_root), target])
-		if frame_indent >= 0 and frame_regex.search(code):
+		if func_name == "on_frame" and frame_regex.search(code):
 			errors.append("%s：on_frame 只能做畫面效果，不能呼叫戰鬥 API" % where)
+		var stat_match: RegExMatch = stat_regex.search(code)
+		var statement: String = code.strip_edges()
+		if stat_match and func_name != "_init" and not func_match \
+				and not statement.begins_with("var ") and not statement.begins_with("const "):
+			var stat: String = stat_match.get_string(3)
+			var fix: String = "站位只能在 _init() 設定，戰鬥中不能移動" if stat == "grid_position" \
+					else "戰鬥中請用 deal_damage()、heal()、buff_attack()"
+			errors.append("%s：%s%s 只能在 _init() 裡設定；%s" % [where, stat_match.get_string(2), stat, fix])
 	return errors
 
 
