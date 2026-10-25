@@ -266,10 +266,11 @@ func on_frame(delta: float) -> void:
 - `set()`、`call()` 這類方法，或任何 `_framework` 開頭的東西
 - `randi()`、`randf()`、`shuffle()` 等內建隨機：請用 `random_int()` / `random_pick()`
 - `queue_free()`、`add_child()` 等新增或刪除節點的方法
+- 在 `_init()` 以外改 `hp`、`max_hp`、`attack`、`grid_position`（包括 `enemy.hp = 0`）：戰鬥中請用 `deal_damage()`、`heal()`、`buff_attack()`
 - 三個引號的多行字串
 - 繼承 `Boss`
 
-戰鬥中直接寫 `enemy.hp = 0` 也不會成功，戰鬥紀錄會出現紅字。想想看為什麼要這樣設計？
+就算繞過掃描，戰鬥中直接改 `hp` 也不會成功，戰鬥紀錄會出現紅字。想想看為什麼要這樣設計？
 
 ## Boss
 
@@ -290,9 +291,26 @@ Boss 也站在 3×3 棋盤上，預設站**前排中**，行為和戰士一樣�
 
 ### 交隊伍
 
-1. Fork 這個專案，在 `teams/<你的 GitHub 帳號>/` 寫好隊伍
-2. 確認陣型預覽顯示「✓ 隊伍通過檢查」
+1. Fork 這個專案，在 `teams/<你的 GitHub 帳號>/` 寫好隊伍（資料夾名稱要和帳號一模一樣，包含大小寫）
+2. 在自己電腦上跑檢查，全部 ✅ 再發 PR：
+
+   ```sh
+   godot --headless --script res://tools/validate.gd -- 你的GitHub帳號
+   ```
+
 3. 發 PR，**只改自己的資料夾**
+
+發 PR 後 GitHub Actions 會自動跑同一套檢查（第一次發 PR 要等講師按「Approve and run」）。結果在 PR 的 **Checks** 分頁，點進「檢查學員隊伍」看 Summary，沒通過的地方會寫出檔案、行號和修法：
+
+| 檢查 | 內容 |
+|---|---|
+| 1. 只修改自己的資料夾 | PR 改到 `teams/<你的帳號>/` 以外的檔案就失敗 |
+| 2. 程式碼掃描 | [不能做的事](#不能做的事)；沒通過的話後面都不會執行 |
+| 3. 語法 | 每個 `.gd` 都要能編譯 |
+| 4. 隊伍設定 | `team.gd`、站位、數值範圍、預算 |
+| 5. 試打 Boss Lv1 | 戰鬥要能跑完、技能執行時不能出錯；**輸贏不影響** |
+
+技能裡有無窮迴圈的話，檢查會在 10 分鐘後被中止。
 
 ### 對戰規則
 
@@ -349,6 +367,8 @@ godot --headless --script res://framework/simulate.gd -- 帳號A vs 帳號B   # 
 │   ├── arena.tscn            ← 單場擂台
 │   ├── matches.gd            ← 擂台賽對戰組合（講師用）
 │   └── simulate.gd           ← 無畫面模擬
+├── tools/validate.gd         ← 隊伍檢查（本機和 GitHub Actions 共用）
+├── .github/workflows/        ← PR 自動檢查
 ├── bosses/<代號>/boss.gd     ← Boss
 └── teams/
     ├── example/              ← 範例隊伍，每種職業都有
