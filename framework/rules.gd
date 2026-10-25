@@ -31,6 +31,32 @@ const TOKEN_BUDGET := 10       # 每次 on_death 召喚的 token 總共 hp + 2×
 const CALLS_PER_EVENT := 3     # 每隻角色每個事件最多呼叫 3 次 API
 const MAX_EVENT_DEPTH := 3     # 事件連鎖最多 3 層
 
+# --- 能量：技能 API 要花能量，普攻和補師的普通治療免費（Boss 不用能量）---
+const ENERGY_START := 3        # 戰鬥開始時的能量
+const ENERGY_REGEN := 3        # 每回合開始回復
+const ENERGY_MAX := 6          # 最多累積
+const BUFF_ENERGY_PER_POINT := 2   # buff_attack 每加 1 攻擊花 2 能量（召喚 token 不花能量）
+
+# --- 流派：順序和 Unit.School 一樣（NONE、VENOM、AEGIS、BLOOD、NECRO）---
+const SCHOOL_NAMES: Array[String] = ["無", "劇毒", "聖盾", "狂血", "死靈"]
+const SCHOOL_ICONS: Array[String] = ["", "🧪", "🛡️", "🔥", "💀"]
+const SCHOOL_TIERS: Array[int] = [2, 4]   # 開場時同流派幾隻啟動加成
+const SCHOOL_BONUS_TEXT: Array = [
+	[],
+	["我方施加的毒傷每回合 +1", "中毒的敵人無法被治療"],
+	["開場全隊獲得 3 點護盾", "開場全隊獲得 6 點護盾"],
+	["普通攻擊命中後回復 1 血", "血量低於一半時攻擊 +2"],
+	["死靈角色死亡時獲得 5 點靈魂能量", "死靈角色死亡時對全體敵人造成 1 點傷害"],
+]
+const OFF_SCHOOL_COST := 2     # 用別的流派的 API（包含沒有流派）要花兩倍能量
+const SHIELD_MAX := 10         # 每隻角色的護盾上限
+const VENOM_TICK_BONUS := 1    # 劇毒 2 隻：毒傷每回合 +1
+const AEGIS_SHIELD: Array[int] = [3, 6]   # 聖盾 2 隻 / 4 隻的開場護盾（不疊加）
+const BLOOD_LIFESTEAL := 1     # 狂血 2 隻：普攻命中後回血
+const BLOOD_FURY := 2          # 狂血 4 隻：血量低於一半時普攻 +2
+const NECRO_SOUL := 5          # 死靈 2 隻：on_death 期間可用的靈魂能量
+const NECRO_BLAST := 1         # 死靈 4 隻：死亡時對全體敵人的傷害
+
 const TEAMS_DIR := "res://teams"      # 每個人一個資料夾，用 GitHub 帳號命名
 const DEFAULT_TEAM := "example"
 const DEFAULT_BOSS := "dummy"
@@ -62,6 +88,15 @@ static func cell_name(cell: Vector2i) -> String:
 	if not is_valid_cell(cell):
 		return "場外"
 	return ROW_NAMES[cell.y] + COL_NAMES[cell.x]
+
+
+## 流派加成的等級：0 沒有、1 是 2 隻加成、2 是 4 隻加成
+static func school_tier(count: int) -> int:
+	var tier: int = 0
+	for need: int in SCHOOL_TIERS:
+		if count >= need:
+			tier += 1
+	return tier
 
 
 ## 行動順序：前排 → 後排，同一排由左到右

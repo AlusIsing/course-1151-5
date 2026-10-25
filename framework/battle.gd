@@ -5,10 +5,27 @@ extends RefCounted
 ## 雙方各有 3×3 棋盤（前排、中排、後排），角色站好就不會移動。
 ##
 ## 一回合的順序：
-##   1. Boss 的 on_round_start
-##   2. 照行動順序，每隻角色輪流行動：選目標 → 扣血 → 自己的 on_attack → 受傷者的 on_hurt
-##   3. 結算死亡：on_death → 隊友的 on_ally_death → 從場上移除（召喚的分身站到原本的格子）
-##   4. 一方全滅就結束；超過 MAX_ROUNDS 回合算挑戰者輸
+##   1. 每隻角色回復能量（energy_regen 點，最多 ENERGY_MAX）
+##   2. 中毒的角色照行動順序毒發，每層各算一次傷害
+##   3. Boss 的 on_round_start
+##   4. 照行動順序，每隻角色輪流行動：選目標 → 扣血 → 自己的 on_attack → 受傷者的 on_hurt
+##   5. 一方全滅就結束；打完 MAX_ROUNDS 回合算挑戰者輸
+## 每個動作（一次行動、一層毒發）結束後馬上結算死亡：
+##   on_death → 死靈 4 隻的全體傷害 → 隊友的 on_ally_death → 從場上移除（召喚的分身站到原本的格子）
+## 死亡引起的連鎖全部結算完，才輪到下一個動作。
+##
+## 每一次傷害照這個順序結算（_apply_damage）：
+##   1. 基礎傷害（普攻是 attack，技能是指定的 amount）
+##   2. 攻擊者的增傷（狂血 4 隻：血量低於一半 +2，只有普攻）；Boss 的受傷倍率也在這一步
+##   3. 加上目標身上的詛咒，並消耗詛咒
+##   4. 扣護盾（毒傷跳過這一步）
+##   5. 坦克分擔：目標相鄰有我方坦克時，坦克承受 TANK_SHARE_PERCENT%（目標本身是坦克時不分擔）
+##   6. 扣血；血量歸零的角色在這個動作結束後結算死亡
+##
+## 能量與流派：
+##   - 開場 ENERGY_START 點能量；技能 API 要花能量，不夠就回傳 false、不生效、不扣能量
+##   - 流派 API（poison / shield / drain / curse）和施放者同流派是正常價，不同是兩倍價
+##   - 流派加成看開場時同流派的隻數（2 隻、4 隻），之後有人陣亡也不會消失；Boss 不用能量
 ##
 ## 行動順序固定：玩家隊伍先、Boss 隊伍後；同一隊由前排到後排、每排由左到右。
 ## 輪到的時候血量已經歸零的角色不會行動。
@@ -61,6 +78,13 @@ var _depth := 0
 var _tokens := {}         # 死亡的角色 -> 牠召喚的 token 陣列
 var _token_budget := {}   # 死亡的角色 -> 剩下的 token 預算
 var _start_max_hp := [0, 0]  # 開場時兩隊的 max_hp 總和，比剩餘血量用
+var _school_counts: Array = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]  # 開場時兩隊各流派的隻數
+
+# _apply_damage 的傷害種類
+const KIND_ATTACK := 0   # 普攻（狂血 4 隻的增傷只對這個有效）
+const KIND_SKILL := 1    # 技能
+const KIND_POISON := 2   # 毒發（無視護盾）
+const KIND_NECRO := 3    # 死靈 4 隻的全體傷害
 
 
 ## 兩隊的角色腳本，每隻站在自己 grid_position 那一格；要先通過 Validator 檢查
@@ -75,6 +99,7 @@ func _init(player_scripts: Array[Script], enemy_scripts: Array[Script]) -> void:
 		_add_unit(unit, ENEMY, unit.grid_position)
 	for unit: Unit in roster:
 		_start_max_hp[unit._framework_team] += unit.max_hp
+		_school_counts[unit._framework_team][clampi(unit.school, 0, Rules.SCHOOL_NAMES.size() - 1)] += 1
 
 
 ## 改成隊伍對戰；要在 start() 之前呼叫。left 是 PLAYER 那隊、right 是 ENEMY 那隊
@@ -100,6 +125,8 @@ func start() -> void:
 	_log("[b]=== 戰鬥開始（種子 %d）===[/b]" % Rules.SEED)
 	if versus:
 		_log("[b]先手：%s[/b]" % _side(first_team))
+	for team: int in [PLAYER, ENEMY]:
+		_start_schools(team)
 	for unit: Unit in _all_alive():
 		_fire(unit, "on_battle_start", [])
 	_resolve_deaths()
@@ -113,18 +140,72 @@ func step() -> void:
 	_log("[b]— 第 %d 回合 —[/b]" % round_number)
 
 	for unit: Unit in _all_alive():
+		if not unit is Boss:
+			_write(unit, "energy", mini(Rules.ENERGY_MAX, unit.energy + unit.energy_regen))
+	for unit: Unit in _turn_order():
+		if unit.is_alive() and not unit._framework_poisons.is_empty():
+			_tick_poison(unit)
+			_resolve_deaths()
+	if _team_wiped():
+		_check_end()
+		return
+
+	for unit: Unit in _all_alive():
 		if unit is Boss:
 			_fire(unit, "on_round_start", [round_number])
 	_resolve_deaths()
-	if _check_end():
+	if _team_wiped():
+		_check_end()
 		return
 
 	for unit: Unit in _turn_order():
 		if unit.is_alive():
 			_act(unit)
-
-	_resolve_deaths()
+			_resolve_deaths()
+			if _team_wiped():
+				break
 	_check_end()
+
+
+func _team_wiped() -> bool:
+	return get_alive(PLAYER).is_empty() or get_alive(ENEMY).is_empty()
+
+
+## 開場的流派加成：寫進戰鬥紀錄，聖盾發護盾
+func _start_schools(team: int) -> void:
+	var parts: Array[String] = []
+	for school: int in range(1, Rules.SCHOOL_NAMES.size()):
+		var tier: int = school_tier(team, school)
+		if tier == 0:
+			continue
+		var effects: Array = Rules.SCHOOL_BONUS_TEXT[school].slice(0, tier)
+		if school == Unit.School.AEGIS:
+			effects = [Rules.SCHOOL_BONUS_TEXT[school][tier - 1]]   # 聖盾 4 隻取代 2 隻的效果
+		parts.append("%s%s %d 隻（%s）" % [Rules.SCHOOL_ICONS[school], Rules.SCHOOL_NAMES[school],
+				school_count(team, school), "、".join(effects)])
+	if parts.is_empty():
+		return
+	_log("%s 的流派加成：%s" % [_side(team), "；".join(parts)])
+	var aegis: int = school_tier(team, Unit.School.AEGIS)
+	if aegis > 0:
+		var amount: int = Rules.AEGIS_SHIELD[aegis - 1]
+		for unit: Unit in get_alive(team):
+			_write(unit, "shield_points", mini(Rules.SHIELD_MAX, unit.shield_points + amount))
+		_log("%s 聖盾之力：全隊獲得 %d 點護盾" % [_side(team), amount])
+
+
+## 開場時 team 有幾隻 school 流派的角色
+func school_count(team: int, school: int) -> int:
+	if school < 0 or school >= Rules.SCHOOL_NAMES.size():
+		return 0
+	return _school_counts[team][school]
+
+
+## team 的 school 流派加成等級：0 沒有、1 是 2 隻加成、2 是 4 隻加成
+func school_tier(team: int, school: int) -> int:
+	if school == Unit.School.NONE:
+		return 0
+	return Rules.school_tier(school_count(team, school))
 
 
 ## 這回合的行動順序（回合開始時還活著的角色）
@@ -160,8 +241,11 @@ func _act(unit: Unit) -> void:
 
 	unit_acted.emit(unit, targets[0])
 	var hurt: Array = []      # [受傷者, 實際傷害]
+	var verb: String = "狂血攻擊" if _fury(unit) else "攻擊"
 	for target: Unit in targets:
-		hurt.append_array(_apply_damage(target, amount, unit, "攻擊"))
+		hurt.append_array(_apply_damage(target, amount, unit, verb, KIND_ATTACK))
+	if unit.is_alive() and school_tier(unit._framework_team, Unit.School.BLOOD) >= 1:
+		_restore(unit, Rules.BLOOD_LIFESTEAL, "%s 的狂血之力，回了 %d 血（%d/%d）", unit)
 	if unit.is_alive():
 		_fire(unit, "on_attack", [targets[0]])
 	for entry: Array in hurt:
@@ -174,15 +258,30 @@ func _heal_neighbors(healer: Unit) -> void:
 		return
 	var first := true
 	for ally: Unit in adjacent_allies(healer):
-		var amount: int = mini(healer.attack, ally.max_hp - ally.hp)
-		if amount <= 0:
+		if ally.hp >= ally.max_hp:
 			continue
 		if first:
 			unit_acted.emit(healer, ally)
 			first = false
-		_write(ally, "hp", ally.hp + amount)
-		_log("%s 治療 %s，回了 %d 血（%d/%d）" % [_n(healer), _n(ally), amount, ally.hp, ally.max_hp])
-		unit_healed.emit(ally, amount)
+		_restore(ally, healer.attack, "%s 治療 %s，回了 %d 血（%d/%d）", healer)
+
+
+## 回血（不超過 max_hp），中了劇毒 4 隻的毒就不會回。回傳實際回了多少。
+## message 的參數依序是：施放者、目標、回了多少、hp、max_hp；施放者就是目標自己時省略施放者
+func _restore(target: Unit, amount: int, message: String, healer: Unit) -> int:
+	if _heal_blocked(target):
+		_log("%s 中了劇毒，無法被治療" % _n(target))
+		return 0
+	amount = mini(amount, target.max_hp - target.hp)
+	if amount <= 0:
+		return 0
+	_write(target, "hp", target.hp + amount)
+	if healer == target:
+		_log(message % [_n(target), amount, target.hp, target.max_hp])
+	else:
+		_log(message % [_n(healer), _n(target), amount, target.hp, target.max_hp])
+	unit_healed.emit(target, amount)
+	return amount
 
 
 ## 照職業挑普攻的目標（法師會回傳整行）
@@ -242,7 +341,14 @@ func _resolve_deaths() -> void:
 			_token_budget[unit] = Rules.TOKEN_BUDGET
 		for unit: Unit in dying:
 			_log("%s 倒下了" % _n(unit))
+			var necro: int = school_tier(unit._framework_team, Unit.School.NECRO) if unit.school == Unit.School.NECRO else 0
+			if necro >= 1:
+				unit._framework_soul = Rules.NECRO_SOUL
+				_log("%s 獲得 %d 點靈魂能量（只能在 on_death 裡用）" % [_n(unit), Rules.NECRO_SOUL])
 			_fire(unit, "on_death", [])
+			unit._framework_soul = 0
+			if necro >= 2:
+				_necro_blast(unit)
 			for ally: Unit in get_alive(unit._framework_team):
 				_fire(ally, "on_ally_death", [unit])
 		for unit: Unit in dying:
@@ -347,28 +453,96 @@ func _fire(unit: Unit, method: String, args: Array) -> void:
 	_calls_left = saved[2]
 
 
-## 扣血；相鄰有坦克的話坦克分擔一部分。回傳 [[受傷者, 實際傷害], ...]
-func _apply_damage(target: Unit, amount: int, source: Unit, verb: String) -> Array:
+## 照「傷害結算順序」扣血（見檔案開頭）。回傳 [[受傷者, 傷害, 實際少掉的血], ...]，
+## 全部被護盾擋下的話是空陣列
+func _apply_damage(target: Unit, amount: int, source: Unit, verb: String, kind: int = KIND_SKILL) -> Array:
 	if not target.is_alive() or amount <= 0:
 		return []
+	# 2. 攻擊者的增傷、Boss 的受傷倍率
+	if kind == KIND_ATTACK and _fury(source):
+		amount += Rules.BLOOD_FURY
 	var boss := target as Boss
 	if boss:
 		amount *= boss.damage_taken_multiplier
-	var tank: Unit = _guarding_tank(target)
+	# 3. 詛咒
+	if target.curse_points > 0:
+		amount += target.curse_points
+		_log("%s 身上的詛咒發作，傷害 +%d" % [_n(target), target.curse_points])
+		_write(target, "curse_points", 0)
+	# 4. 護盾
+	if kind != KIND_POISON and target.shield_points > 0:
+		var blocked: int = mini(target.shield_points, amount)
+		amount -= blocked
+		_write(target, "shield_points", target.shield_points - blocked)
+		_log("%s 的護盾擋下 %d 點傷害（護盾剩 %d）" % [_n(target), blocked, target.shield_points])
+	# 5. 坦克分擔
+	var tank: Unit = null if target is Tank else _guarding_tank(target)
 	var shared: int = amount * Rules.TANK_SHARE_PERCENT / 100 if tank else 0
 	var taken: int = amount - shared
 
+	# 6. 扣血
 	var hurt: Array = []
+	var before: int = target.hp
 	_write(target, "hp", maxi(0, target.hp - taken))
 	_log("%s %s %s，造成 %d 傷害（剩 %d）" % [_n(source), verb, _n(target), taken, target.hp])
-	unit_damaged.emit(target, taken)
-	hurt.append([target, taken])
+	if taken > 0:
+		unit_damaged.emit(target, taken)
+		hurt.append([target, taken, before - target.hp])
 	if shared > 0:
+		before = tank.hp
 		_write(tank, "hp", maxi(0, tank.hp - shared))
 		_log("%s 替 %s 擋下 %d 傷害（剩 %d）" % [_n(tank), _n(target), shared, tank.hp])
 		unit_damaged.emit(tank, shared)
-		hurt.append([tank, shared])
+		hurt.append([tank, shared, before - tank.hp])
 	return hurt
+
+
+## 狂血 4 隻：血量低於一半的角色普攻 +2
+func _fury(unit: Unit) -> bool:
+	return unit != null and school_tier(unit._framework_team, Unit.School.BLOOD) >= 2 and unit.hp * 2 < unit.max_hp
+
+
+## 劇毒 4 隻：中了那一隊的毒的敵人無法被治療
+func _heal_blocked(unit: Unit) -> bool:
+	for stack: Dictionary in unit._framework_poisons:
+		if stack["team"] != unit._framework_team and school_tier(stack["team"], Unit.School.VENOM) >= 2:
+			return true
+	return false
+
+
+## 每層毒各算一次傷害（無視護盾）；劇毒 2 隻的隊伍下的毒每次 +1
+func _tick_poison(unit: Unit) -> void:
+	for stack: Dictionary in unit._framework_poisons.duplicate():
+		if not unit.is_alive():
+			break
+		stack["turns"] -= 1
+		var amount: int = stack["amount"]
+		if school_tier(stack["team"], Unit.School.VENOM) >= 1:
+			amount += Rules.VENOM_TICK_BONUS
+		var source: Unit = stack["source"]
+		for entry: Array in _apply_damage(unit, amount, source, "的毒侵蝕", KIND_POISON):
+			if entry[0].is_alive():
+				_fire(entry[0], "on_hurt", [entry[1], source])
+	var remaining: Array[Dictionary] = []
+	for stack: Dictionary in unit._framework_poisons:
+		if stack["turns"] > 0:
+			remaining.append(stack)
+	unit._framework_poisons = remaining
+	unit.queue_redraw()
+
+
+## 死靈 4 隻：死靈角色的 on_death 結束後，對全體敵人造成 1 點傷害（免費）
+func _necro_blast(unit: Unit) -> void:
+	var enemies: Array[Unit] = get_alive(1 - unit._framework_team)
+	if enemies.is_empty():
+		return
+	_log("%s 死亡，死靈之力對全體敵人造成 %d 點傷害" % [_n(unit), Rules.NECRO_BLAST])
+	var hurt: Array = []
+	for enemy: Unit in enemies:
+		hurt.append_array(_apply_damage(enemy, Rules.NECRO_BLAST, unit, "的死靈之力波及", KIND_NECRO))
+	for entry: Array in hurt:
+		if entry[0].is_alive():
+			_fire(entry[0], "on_hurt", [entry[1], unit])
 
 
 ## 會替 unit 分擔傷害的坦克：相鄰、還活著、行動順序最前面的那隻
@@ -381,58 +555,139 @@ func _guarding_tank(unit: Unit) -> Unit:
 
 # ---------------------------------------------------------------- 戰鬥 API
 
-func api_deal_damage(caller: Unit, target: Unit, amount: int) -> void:
+func api_deal_damage(caller: Unit, target: Unit, amount: int) -> bool:
 	if not _api_begin(caller, "deal_damage") or not _check_target(caller, target, "deal_damage"):
-		return
+		return false
 	amount = _cap(caller, "deal_damage", amount, 1, Rules.DAMAGE_CAP)
+	if not _spend(caller, amount, "技能攻擊"):
+		return false
 	for entry: Array in _apply_damage(target, amount, caller, "用技能打"):
 		if entry[0].is_alive():
 			_fire(entry[0], "on_hurt", [entry[1], caller])
+	return true
 
 
-func api_heal(caller: Unit, target: Unit, amount: int) -> void:
+func api_heal(caller: Unit, target: Unit, amount: int) -> bool:
 	if not _api_begin(caller, "heal") or not _check_target(caller, target, "heal"):
-		return
+		return false
 	amount = _cap(caller, "heal", amount, 1, Rules.HEAL_CAP)
-	amount = mini(amount, target.max_hp - target.hp)
-	if amount <= 0:
+	if target.hp >= target.max_hp:
 		_log("%s 想幫 %s 回血，但牠已經滿血了" % [_n(caller), _n(target)])
-		return
-	_write(target, "hp", target.hp + amount)
-	_log("%s 幫 %s 回了 %d 血（%d/%d）" % [_n(caller), _n(target), amount, target.hp, target.max_hp])
-	unit_healed.emit(target, amount)
+		return false
+	if _heal_blocked(target):
+		_log("%s 想幫 %s 回血，但 %s 中了劇毒，無法被治療" % [_n(caller), _n(target), _n(target)])
+		return false
+	if not _spend(caller, amount, "治療"):
+		return false
+	_restore(target, amount, "%s 幫 %s 回了 %d 血（%d/%d）" if caller != target else "%s 幫自己回了 %d 血（%d/%d）", caller)
+	return true
 
 
-func api_buff_attack(caller: Unit, target: Unit, amount: int) -> void:
+func api_buff_attack(caller: Unit, target: Unit, amount: int) -> bool:
 	if not _api_begin(caller, "buff_attack") or not _check_target(caller, target, "buff_attack"):
-		return
+		return false
 	amount = _cap(caller, "buff_attack", amount, 1, Rules.BUFF_CAP)
 	if not caller is Boss:
 		amount = mini(amount, Rules.ATTACK_LIMIT - target.attack)
 	if amount <= 0:
 		_log("%s 想幫 %s 加攻擊，但已經到上限 %d 了" % [_n(caller), _n(target), Rules.ATTACK_LIMIT])
-		return
+		return false
+	var cost: int = amount * Rules.BUFF_ENERGY_PER_POINT
+	var paid: String = _cost_note(caller, cost)
+	if not _spend(caller, cost, "加攻擊"):
+		return false
 	_write(target, "attack", target.attack + amount)
-	_log("%s 幫 %s 加了 %d 攻擊（變成 %d）" % [_n(caller), _n(target), amount, target.attack])
+	_log("%s 幫 %s 加了 %d 攻擊（變成 %d%s）" % [_n(caller), _n(target), amount, target.attack, paid])
+	return true
 
 
-func api_summon_token(caller: Unit, token_hp: int, token_attack: int) -> void:
+## 🧪 劇毒：每層毒是獨立的，回合開始時各算一次傷害
+func api_poison(caller: Unit, target: Unit, amount: int, turns: int) -> bool:
+	if not _api_begin(caller, "poison") or not _check_target(caller, target, "poison"):
+		return false
+	amount = _cap(caller, "poison", amount, 1, Rules.ENERGY_MAX + Rules.NECRO_SOUL)
+	turns = _cap(caller, "poison", turns, 1, Rules.ENERGY_MAX + Rules.NECRO_SOUL)
+	var cost: int = _school_cost(caller, Unit.School.VENOM, amount * turns)
+	var paid: String = _cost_note(caller, cost)
+	if not _spend(caller, cost, "下毒"):
+		return false
+	target._framework_poisons.append({"amount": amount, "turns": turns, "source": caller, "team": caller._framework_team})
+	target.queue_redraw()
+	_log("%s 對 %s 施加中毒（%d 傷 × %d 回合%s）" % [_n(caller), _n(target), amount, turns, paid])
+	return true
+
+
+## 🛡️ 聖盾：護盾最多 SHIELD_MAX 點，超過的部分浪費掉
+func api_shield(caller: Unit, target: Unit, amount: int) -> bool:
+	if not _api_begin(caller, "shield") or not _check_target(caller, target, "shield"):
+		return false
+	amount = _cap(caller, "shield", amount, 1, Rules.SHIELD_MAX)
+	if target.shield_points >= Rules.SHIELD_MAX:
+		_log("%s 想給 %s 護盾，但已經滿 %d 點了" % [_n(caller), _n(target), Rules.SHIELD_MAX])
+		return false
+	var cost: int = _school_cost(caller, Unit.School.AEGIS, amount)
+	var paid: String = _cost_note(caller, cost)
+	if not _spend(caller, cost, "護盾"):
+		return false
+	var added: int = mini(amount, Rules.SHIELD_MAX - target.shield_points)
+	_write(target, "shield_points", target.shield_points + added)
+	_log("%s 給 %s %d 點護盾（現在 %d 點%s）" % [_n(caller), _n(target), added, target.shield_points, paid])
+	return true
+
+
+## 🔥 狂血：照一般傷害結算，回復的血量是目標實際少掉的血（包含坦克分擔的部分）
+func api_drain(caller: Unit, target: Unit, amount: int) -> bool:
+	if not _api_begin(caller, "drain") or not _check_target(caller, target, "drain"):
+		return false
+	amount = _cap(caller, "drain", amount, 1, Rules.DAMAGE_CAP)
+	var cost: int = _school_cost(caller, Unit.School.BLOOD, amount * 2)
+	var paid: String = _cost_note(caller, cost)
+	if not _spend(caller, cost, "吸血"):
+		return false
+	_log("%s 對 %s 吸血%s" % [_n(caller), _n(target), "（%s）" % paid.trim_prefix("，") if paid != "" else ""])
+	var hurt: Array = _apply_damage(target, amount, caller, "吸血攻擊")
+	var dealt: int = 0
+	for entry: Array in hurt:
+		dealt += entry[2]
+	if dealt > 0 and caller.is_alive():
+		_restore(caller, dealt, "%s 吸回 %d 血（%d/%d）", caller)
+	for entry: Array in hurt:
+		if entry[0].is_alive():
+			_fire(entry[0], "on_hurt", [entry[1], caller])
+	return true
+
+
+## 💀 死靈：詛咒會累加，目標下一次受傷時一次用掉
+func api_curse(caller: Unit, target: Unit, amount: int) -> bool:
+	if not _api_begin(caller, "curse") or not _check_target(caller, target, "curse"):
+		return false
+	amount = _cap(caller, "curse", amount, 1, Rules.ENERGY_MAX + Rules.NECRO_SOUL)
+	var cost: int = _school_cost(caller, Unit.School.NECRO, amount)
+	var paid: String = _cost_note(caller, cost)
+	if not _spend(caller, cost, "詛咒"):
+		return false
+	_write(target, "curse_points", target.curse_points + amount)
+	_log("%s 對 %s 下了詛咒（下次受傷 +%d，累計 +%d%s）" % [_n(caller), _n(target), amount, target.curse_points, paid])
+	return true
+
+
+func api_summon_token(caller: Unit, token_hp: int, token_attack: int) -> bool:
 	if not _api_begin(caller, "summon_token"):
-		return
+		return false
 	if _event != "on_death":
 		report_violation(caller, "summon_token() 只能在 on_death 裡用")
-		return
+		return false
 	token_hp = maxi(1, token_hp)
 	token_attack = maxi(0, token_attack)
 	var cost := Rules.unit_cost(token_hp, token_attack)
 	if cost > _token_budget[caller]:
 		report_violation(caller, "召喚的 token 太貴（hp %d + 2×attack %d = %d，剩下的額度只有 %d）"
 				% [token_hp, token_attack, cost, _token_budget[caller]])
-		return
+		return false
 	var alive: int = get_alive(caller._framework_team).size() + _tokens[caller].size()
 	if alive >= Rules.MAX_UNITS:
 		_log("%s 想召喚，但隊伍已經滿 %d 隻了" % [_n(caller), Rules.MAX_UNITS])
-		return
+		return false
 	_token_budget[caller] -= cost
 	var token := Unit.new()
 	token.unit_name = caller.unit_name + "分身"
@@ -442,6 +697,36 @@ func api_summon_token(caller: Unit, token_hp: int, token_attack: int) -> void:
 	token.body_radius = 24.0
 	_tokens[caller].append(token)
 	_log("%s 召喚了 %s（攻 %d、血 %d）" % [_n(caller), token.unit_name, token_attack, token_hp])
+	return true
+
+
+## 流派 API 的價格：和施放者同流派是 base，不同（包含沒有流派）是兩倍
+func _school_cost(caller: Unit, school: int, base: int) -> int:
+	return base if caller.school == school else base * Rules.OFF_SCHOOL_COST
+
+
+## 寫在戰鬥紀錄的花費，例如「，花費 6 能量」；Boss 不用能量所以是空字串
+func _cost_note(caller: Unit, cost: int) -> String:
+	if caller is Boss:
+		return ""
+	var soul: int = mini(caller._framework_soul, cost)
+	if soul > 0:
+		return "，花費 %d 能量（其中 %d 點是靈魂能量）" % [cost, soul]
+	return "，花費 %d 能量" % cost
+
+
+## 扣能量：先用靈魂能量，不夠再用一般能量。不夠付就寫進紀錄、回傳 false，一點都不扣
+func _spend(caller: Unit, cost: int, action: String) -> bool:
+	if caller is Boss:
+		return true
+	var available: int = caller.energy + caller._framework_soul
+	if cost > available:
+		_log("%s 能量不足，%s失敗（需要 %d，只有 %d）" % [_n(caller), action, cost, available])
+		return false
+	var soul: int = mini(caller._framework_soul, cost)
+	caller._framework_soul -= soul
+	_write(caller, "energy", caller.energy - (cost - soul))
+	return true
 
 
 func api_say(caller: Unit, text: String) -> void:
@@ -550,6 +835,7 @@ func _add_unit(unit: Unit, team: int, cell: Vector2i) -> void:
 	unit._framework_team = team
 	unit.grid_position = cell
 	_write(unit, "hp", unit.max_hp)
+	_write(unit, "energy", 0 if unit is Boss else Rules.ENERGY_START)
 	unit._framework_locked = true
 	roster.append(unit)
 	# 照行動順序插進去，get_alive() 就不用每次排序

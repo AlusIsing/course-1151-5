@@ -33,9 +33,11 @@ const BANNED := [
 	[r"\bBoss\b",
 		"學員的角色不能用 Boss 類別"],
 ]
-const FRAME_FORBIDDEN := r"\b(deal_damage|heal|buff_attack|summon_token|say)\s*\("
-# 指定 hp、max_hp、attack、grid_position（包含 enemy.hp = 0 這種）；== 是比較，不算
-const STAT_WRITE := r"(^|[^\w.])((?:\w+\.)*)(hp|max_hp|attack|grid_position)\s*([-+*/%]?=)(?!=)"
+const FRAME_FORBIDDEN := r"\b(deal_damage|heal|buff_attack|summon_token|say|poison|shield|drain|curse)\s*\("
+# 指定 hp、max_hp、attack、grid_position、school、能量、護盾、詛咒（包含 enemy.hp = 0 這種）；== 是比較，不算
+const STAT_WRITE := r"(^|[^\w.])((?:\w+\.)*)(hp|max_hp|attack|grid_position|school|energy|energy_regen|shield_points|curse_points)\s*([-+*/%]?=)(?!=)"
+# 只有框架能改的狀態，連 _init() 裡也不能改
+const FRAMEWORK_ONLY: Array[String] = ["energy", "energy_regen", "shield_points", "curse_points"]
 
 
 ## 檢查 teams/<github>/：先掃描整個資料夾的程式碼，通過了才執行 team.gd 和角色的 _init()
@@ -99,6 +101,8 @@ static func check_team(members: Array, dir: String) -> Array[String]:
 		if unit.attack < Rules.ATTACK_MIN or unit.attack > Rules.ATTACK_MAX:
 			errors.append("%s：attack 要在 %d–%d 之間，現在是 %d"
 					% [label, Rules.ATTACK_MIN, Rules.ATTACK_MAX, unit.attack])
+		if unit.school < 0 or unit.school >= Rules.SCHOOL_NAMES.size():
+			errors.append("%s：school 要是 School.NONE、VENOM、AEGIS、BLOOD、NECRO 其中一個" % label)
 		var cell: Vector2i = unit.grid_position
 		if not Rules.is_valid_cell(cell):
 			errors.append("%s：請在 _init() 設定 grid_position，x 和 y 都要是 0–2，現在是 (%d, %d)"
@@ -198,12 +202,17 @@ static func check_source(path: String) -> Array[String]:
 			errors.append("%s：on_frame 只能做畫面效果，不能呼叫戰鬥 API" % where)
 		var stat_match: RegExMatch = stat_regex.search(code)
 		var statement: String = code.strip_edges()
-		if stat_match and func_name != "_init" and not func_match \
-				and not statement.begins_with("var ") and not statement.begins_with("const "):
-			var stat: String = stat_match.get_string(3)
-			var fix: String = "站位只能在 _init() 設定，戰鬥中不能移動" if stat == "grid_position" \
-					else "戰鬥中請用 deal_damage()、heal()、buff_attack()"
-			errors.append("%s：%s%s 只能在 _init() 裡設定；%s" % [where, stat_match.get_string(2), stat, fix])
+		var stat: String = stat_match.get_string(3) if stat_match else ""
+		if stat_match and not func_match and not statement.begins_with("var ") and not statement.begins_with("const ") \
+				and (func_name != "_init" or FRAMEWORK_ONLY.has(stat)):
+			if FRAMEWORK_ONLY.has(stat):
+				errors.append("%s：%s%s 只有框架能改；護盾請用 shield()、詛咒請用 curse()，能量每回合會自己回復"
+						% [where, stat_match.get_string(2), stat])
+			else:
+				var fix: String = "站位只能在 _init() 設定，戰鬥中不能移動" if stat == "grid_position" \
+						else "流派只能在 _init() 設定" if stat == "school" \
+						else "戰鬥中請用 deal_damage()、heal()、buff_attack()"
+				errors.append("%s：%s%s 只能在 _init() 裡設定；%s" % [where, stat_match.get_string(2), stat, fix])
 	return errors
 
 
