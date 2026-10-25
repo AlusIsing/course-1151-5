@@ -35,7 +35,8 @@ const TEAMS_DIR := "res://teams"      # 每個人一個資料夾，用 GitHub �
 const DEFAULT_TEAM := "example"
 const DEFAULT_BOSS := "dummy"
 const PREVIEW_SCENE := "res://framework/preview/team_preview.tscn"
-const ARENA_SCENE := "res://framework/arena.tscn"
+const ARENA_SCENE := "res://framework/arena_screen.tscn"
+const MATCHES_PATH := "res://framework/matches.gd"
 const BOSSES := {
 	"dummy": "res://bosses/dummy/boss.gd",
 	"lv1": "res://bosses/lv1/boss.gd",

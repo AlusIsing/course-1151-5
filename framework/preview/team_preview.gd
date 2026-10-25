@@ -19,6 +19,7 @@ class UnitInfo:
 @onready var reload_button: Button = %ReloadButton
 @onready var budget_label: Label = %Budget
 @onready var try_button: Button = %TryButton
+@onready var tournament_button: Button = %TournamentButton
 @onready var team_label: Label = %TeamLabel
 @onready var member_list: VBoxContainer = %MemberList
 @onready var board: GridContainer = %Board
@@ -54,7 +55,12 @@ func _ready() -> void:
 		_reload())
 	boss_select.item_selected.connect(func(index: int) -> void: MatchSetup.boss_key = boss_keys[index])
 	reload_button.pressed.connect(_reload)
-	try_button.pressed.connect(func() -> void: get_tree().change_scene_to_file(Rules.ARENA_SCENE))
+	try_button.pressed.connect(func() -> void:
+		MatchSetup.mode = "boss"
+		get_tree().change_scene_to_file(Rules.ARENA_SCENE))
+	tournament_button.pressed.connect(func() -> void:
+		MatchSetup.mode = "versus"
+		get_tree().change_scene_to_file(Rules.ARENA_SCENE))
 	_reload()
 
 

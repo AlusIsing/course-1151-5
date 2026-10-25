@@ -9,19 +9,22 @@ script = ExtResource("1_arena")
 z_index = -10
 offset_right = 1152.0
 offset_bottom = 648.0
+mouse_filter = 2
 color = Color(0.11, 0.12, 0.16, 1)
 
 [node name="Units" type="Node2D" parent="."]
 
-[node name="UI" type="CanvasLayer" parent="."]
+[node name="UI" type="Node2D" parent="."]
 
 [node name="Title" type="Label" parent="UI"]
 offset_left = 16.0
-offset_top = 12.0
+offset_top = 6.0
 offset_right = 1136.0
-offset_bottom = 44.0
+offset_bottom = 48.0
 theme_override_font_sizes/font_size = 20
 text = "擂台"
+vertical_alignment = 1
+clip_text = true
 
 [node name="Banner" type="Label" parent="UI"]
 visible = false
@@ -39,6 +42,7 @@ offset_left = 652.0
 offset_top = 52.0
 offset_right = 1140.0
 offset_bottom = 612.0
+mouse_filter = 2
 
 [node name="Log" type="RichTextLabel" parent="UI"]
 offset_left = 664.0
@@ -55,4 +59,4 @@ offset_right = 1136.0
 offset_bottom = 642.0
 theme_override_colors/font_color = Color(1, 1, 1, 0.5)
 theme_override_font_sizes/font_size = 14
-text = "R 重新開始　　Esc 回陣型預覽　　空白鍵 暫停　　1 / 2 / 3 切換速度　　右邊是戰鬥紀錄，往上捲可以看完整過程"
+text = "R 重新開始　　Esc 返回　　空白鍵 暫停　　1 / 2 / 3 切換速度　　右邊是戰鬥紀錄，往上捲可以看完整過程"
