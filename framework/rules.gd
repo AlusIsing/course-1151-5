@@ -31,17 +31,16 @@ const TOKEN_BUDGET := 10       # 每次 on_death 召喚的 token 總共 hp + 2×
 const CALLS_PER_EVENT := 3     # 每隻角色每個事件最多呼叫 3 次 API
 const MAX_EVENT_DEPTH := 3     # 事件連鎖最多 3 層
 
-const TEAMS_DIR := "res://teams"
-const DEFAULT_TEAM := "my_team"
+const TEAMS_DIR := "res://teams"      # 每個人一個資料夾，用 GitHub 帳號命名
+const DEFAULT_TEAM := "example"
 const DEFAULT_BOSS := "dummy"
-const EDITOR_SCENE := "res://framework/editor/formation_editor.tscn"
+const PREVIEW_SCENE := "res://framework/preview/team_preview.tscn"
 const ARENA_SCENE := "res://framework/arena.tscn"
-# Boss 的資料夾，裡面有 boss.gd 和 formation.json（Boss 站哪一格）
 const BOSSES := {
-	"dummy": "res://bosses/dummy",
-	"lv1": "res://bosses/lv1",
-	"lv2": "res://bosses/lv2",
-	"lv3": "res://bosses/lv3",
+	"dummy": "res://bosses/dummy/boss.gd",
+	"lv1": "res://bosses/lv1/boss.gd",
+	"lv2": "res://bosses/lv2/boss.gd",
+	"lv3": "res://bosses/lv3/boss.gd",
 }
 
 
@@ -49,8 +48,8 @@ static func unit_cost(max_hp: int, attack: int) -> int:
 	return max_hp * HP_COST + attack * ATTACK_COST
 
 
-static func team_dir(team_name: String) -> String:
-	return "%s/%s" % [TEAMS_DIR, team_name]
+static func team_dir(github: String) -> String:
+	return "%s/%s" % [TEAMS_DIR, github]
 
 
 static func is_valid_cell(cell: Vector2i) -> bool:

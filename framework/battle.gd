@@ -53,16 +53,16 @@ var _tokens := {}         # 死亡的角色 -> 牠召喚的 token 陣列
 var _token_budget := {}   # 死亡的角色 -> 剩下的 token 預算
 
 
-## player、enemy 是兩隊的陣型；腳本要先通過 Validator 檢查
-func _init(player: Formation, enemy: Formation) -> void:
+## 兩隊的角色腳本，每隻站在自己 grid_position 那一格；要先通過 Validator 檢查
+func _init(player_scripts: Array[Script], enemy_scripts: Array[Script]) -> void:
 	rng.seed = Rules.SEED
 	seed(Rules.SEED)
-	for pair: Array in [[player, PLAYER], [enemy, ENEMY]]:
-		var formation: Formation = pair[0]
-		var slots: Array[Formation.Slot] = formation.sorted_slots()
-		var scripts: Array[Script] = formation.load_scripts()
-		for i: int in slots.size():
-			_add_unit(scripts[i].new(), pair[1], slots[i].cell)
+	for script: Script in player_scripts:
+		var unit: Unit = script.new()
+		_add_unit(unit, PLAYER, unit.grid_position)
+	for script: Script in enemy_scripts:
+		var unit: Unit = script.new()
+		_add_unit(unit, ENEMY, unit.grid_position)
 
 
 # ---------------------------------------------------------------- 流程
@@ -145,7 +145,7 @@ func _pick_targets(attacker: Unit) -> Array[Unit]:
 	var enemies: Array[Unit] = get_alive(enemy_team)
 	if enemies.is_empty():
 		return []
-	var col: int = attacker._framework_cell.x
+	var col: int = attacker.grid_position.x
 
 	if attacker is Mage:
 		return units_in_column(enemy_team, _nearest_column(enemies, col))
@@ -158,7 +158,7 @@ func _pick_targets(attacker: Unit) -> Array[Unit]:
 		return [picked]
 
 	# 近戰打最前排、刺客打最後排；get_alive 照前排到後排排好
-	var row: int = enemies[-1]._framework_cell.y if attacker is Assassin else enemies[0]._framework_cell.y
+	var row: int = enemies[-1].grid_position.y if attacker is Assassin else enemies[0].grid_position.y
 	var in_row: Array[Unit] = units_in_row(enemy_team, row)
 	return [in_row[_nearest_index(in_row, col)]]
 
@@ -167,7 +167,7 @@ func _pick_targets(attacker: Unit) -> Array[Unit]:
 func _nearest_index(units: Array[Unit], col: int) -> int:
 	var best: int = 0
 	for i: int in units.size():
-		if absi(units[i]._framework_cell.x - col) < absi(units[best]._framework_cell.x - col):
+		if absi(units[i].grid_position.x - col) < absi(units[best].grid_position.x - col):
 			best = i
 	return best
 
@@ -175,7 +175,7 @@ func _nearest_index(units: Array[Unit], col: int) -> int:
 func _nearest_column(units: Array[Unit], col: int) -> int:
 	var best: int = -1
 	for unit: Unit in units:
-		var c: int = unit._framework_cell.x
+		var c: int = unit.grid_position.x
 		if best < 0 or absi(c - col) < absi(best - col) or (absi(c - col) == absi(best - col) and c < best):
 			best = c
 	return best
@@ -203,7 +203,7 @@ func _resolve_deaths() -> void:
 			teams[unit._framework_team].erase(unit)
 			unit_died.emit(unit)
 			for token: Unit in _tokens[unit]:
-				var cell: Vector2i = _free_cell_near(unit._framework_team, unit._framework_cell)
+				var cell: Vector2i = _free_cell_near(unit._framework_team, unit.grid_position)
 				if cell.x < 0:
 					token.free()
 					continue
@@ -421,7 +421,7 @@ func get_alive(team: int) -> Array[Unit]:
 func units_in_row(team: int, row: int) -> Array[Unit]:
 	var units: Array[Unit] = []
 	for unit: Unit in get_alive(team):
-		if unit._framework_cell.y == row:
+		if unit.grid_position.y == row:
 			units.append(unit)
 	return units
 
@@ -429,7 +429,7 @@ func units_in_row(team: int, row: int) -> Array[Unit]:
 func units_in_column(team: int, col: int) -> Array[Unit]:
 	var units: Array[Unit] = []
 	for unit: Unit in get_alive(team):
-		if unit._framework_cell.x == col:
+		if unit.grid_position.x == col:
 			units.append(unit)
 	return units
 
@@ -437,7 +437,7 @@ func units_in_column(team: int, col: int) -> Array[Unit]:
 func adjacent_allies(unit: Unit) -> Array[Unit]:
 	var units: Array[Unit] = []
 	for ally: Unit in get_alive(unit._framework_team):
-		var diff: Vector2i = (ally._framework_cell - unit._framework_cell).abs()
+		var diff: Vector2i = (ally.grid_position - unit.grid_position).abs()
 		if diff.x + diff.y == 1:
 			units.append(ally)
 	return units
@@ -447,7 +447,7 @@ func adjacent_allies(unit: Unit) -> Array[Unit]:
 
 func _unit_at(team: int, cell: Vector2i) -> Unit:
 	for unit: Unit in teams[team]:
-		if unit._framework_cell == cell:
+		if unit.grid_position == cell:
 			return unit
 	return null
 
@@ -468,7 +468,7 @@ func _all_alive() -> Array[Unit]:
 func _add_unit(unit: Unit, team: int, cell: Vector2i) -> void:
 	unit._framework_battle = self
 	unit._framework_team = team
-	unit._framework_cell = cell
+	unit.grid_position = cell
 	_write(unit, "hp", unit.max_hp)
 	unit._framework_locked = true
 	roster.append(unit)
@@ -476,7 +476,7 @@ func _add_unit(unit: Unit, team: int, cell: Vector2i) -> void:
 	var list: Array = teams[team]
 	var index: int = list.size()
 	for i: int in list.size():
-		if Rules.cell_order(list[i]._framework_cell) > Rules.cell_order(cell):
+		if Rules.cell_order(list[i].grid_position) > Rules.cell_order(cell):
 			index = i
 			break
 	list.insert(index, unit)
@@ -493,7 +493,7 @@ func _n(unit: Unit) -> String:
 	if unit == null:
 		return "？"
 	return "[color=%s][lb]%s[rb] %s[/color]" % [TEAM_COLORS[unit._framework_team],
-			Rules.cell_name(unit._framework_cell), unit.unit_name]
+			Rules.cell_name(unit.grid_position), unit.unit_name]
 
 
 func _log(text: String) -> void:

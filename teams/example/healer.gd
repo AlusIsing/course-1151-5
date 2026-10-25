@@ -9,6 +9,7 @@ func _init() -> void:
 	max_hp = 12
 	attack = 2
 	color = Color("#f8bbd0")
+	grid_position = Vector2i(1, 1)   # 中排中
 
 
 func on_hurt(_amount: int, _source: Unit) -> void:

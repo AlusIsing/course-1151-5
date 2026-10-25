@@ -1,5 +1,5 @@
 extends Node2D
-## 擂台：讀兩邊的 formation.json、檢查隊伍、一回合一回合播放戰鬥。
+## 擂台：檢查隊伍、讀 team.gd 和 Boss，一回合一回合播放戰鬥。
 ## 上半部是 Boss 的棋盤（前排在下面），下半部是我方棋盤（前排在上面），兩邊的前排面對面。
 
 const STEP_TIME: float = 0.9      # 每回合至少停這麼久
@@ -27,19 +27,17 @@ var _fx_delay: float = 0.0        # 這回合下一個畫面效果要延遲多�
 
 
 func _ready() -> void:
-	var player: Formation = MatchSetup.player_formation()
-	var boss_key: String = MatchSetup.resolve_boss(player)
+	var boss_key: String = MatchSetup.boss_key
 	if not Rules.BOSSES.has(boss_key):
 		_show_errors(["Boss 要是 %s 其中一個，現在是 \"%s\"" % [", ".join(Rules.BOSSES.keys()), boss_key]])
 		return
-	var errors: Array[String] = Validator.check_formation(player)
-	var enemy: Formation = Formation.load_dir(Rules.BOSSES[boss_key])
-	errors.append_array(Validator.check_cells(enemy))
+	var errors: Array[String] = Validator.check_team_folder(MatchSetup.team)
 	if not errors.is_empty():
 		_show_errors(errors)
 		return
 
-	battle = Battle.new(player, enemy)
+	var team: Team = Team.load_folder(MatchSetup.team)
+	battle = Battle.new(team.members, [load(Rules.BOSSES[boss_key]) as Script])
 	battle.logged.connect(_on_logged)
 	battle.unit_added.connect(_add_holder)
 	battle.unit_died.connect(_on_unit_died)
@@ -55,8 +53,7 @@ func _ready() -> void:
 	for unit: Unit in battle.teams[Battle.ENEMY]:
 		if unit is Boss:
 			boss_name = unit.unit_name
-	title_label.text = "挑戰：%s　　%s：%s" % [boss_name, MatchSetup.team_name,
-			Validator.describe_cost(player.load_scripts())]
+	title_label.text = "挑戰：%s　　%s：%s" % [boss_name, team.label(), Validator.describe_cost(team.members)]
 	_fx_delay = 0.0
 	battle.start()
 
@@ -80,7 +77,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_R:
 			get_tree().reload_current_scene()
 		KEY_ESCAPE:
-			get_tree().change_scene_to_file(Rules.EDITOR_SCENE)
+			get_tree().change_scene_to_file(Rules.PREVIEW_SCENE)
 		KEY_SPACE:
 			paused = not paused
 		KEY_1:
@@ -119,7 +116,7 @@ func cell_position(team: int, cell: Vector2i) -> Vector2:
 
 func _add_holder(unit: Unit) -> void:
 	var holder: Node2D = Node2D.new()
-	holder.position = cell_position(unit._framework_team, unit._framework_cell)
+	holder.position = cell_position(unit._framework_team, unit.grid_position)
 	holder.scale = Vector2.ONE * UNIT_SCALE
 	holder.add_child(unit)
 	units_root.add_child(holder)
@@ -155,7 +152,7 @@ func _on_unit_acted(unit: Unit, target: Unit) -> void:
 
 func _play_lunge(unit: Unit, target: Unit) -> void:
 	var holder: Node2D = holders[unit]
-	var home: Vector2 = cell_position(unit._framework_team, unit._framework_cell)
+	var home: Vector2 = cell_position(unit._framework_team, unit.grid_position)
 	var to_target: Vector2 = holders[target].position - home
 	var offset: Vector2 = to_target.normalized() * minf(LUNGE, to_target.length() * 0.5)
 	var tween: Tween = create_tween()
@@ -200,7 +197,7 @@ func _on_finished(result: String) -> void:
 
 
 func _show_errors(errors: Array[String]) -> void:
-	title_label.text = "隊伍沒有通過檢查，按 Esc 回陣型編輯器修正"
+	title_label.text = "隊伍沒有通過檢查，改好程式後按 Esc 回陣型預覽"
 	banner.text = "無法上場"
 	banner.add_theme_color_override("font_color", Color("#ff8a80"))
 	banner.show()

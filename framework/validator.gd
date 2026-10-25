@@ -1,6 +1,6 @@
 class_name Validator
 extends RefCounted
-## 上場前的檢查：陣型格子、點數預算 + 用文字掃描學員的 .gd 擋掉作弊寫法。
+## 上場前的檢查：用文字掃描學員的 .gd 擋掉作弊寫法 + 站位、點數預算。
 ## 回傳錯誤訊息陣列，空陣列代表通過。
 
 const BANNED := [
@@ -22,80 +22,102 @@ const BANNED := [
 const FRAME_FORBIDDEN := r"\b(deal_damage|heal|buff_attack|summon_token|say)\s*\("
 
 
-## 玩家的陣型：格子 + 預算 + 程式碼掃描
-static func check_formation(formation: Formation) -> Array[String]:
-	var errors: Array[String] = check_cells(formation)
+## 檢查 teams/<github>/：先掃描整個資料夾的程式碼，通過了才執行 team.gd 和角色的 _init()
+static func check_team_folder(github: String) -> Array[String]:
+	var errors: Array[String] = []
+	var dir: String = Rules.team_dir(github)
+	if github == "" or not DirAccess.dir_exists_absolute(dir):
+		errors.append("找不到隊伍資料夾 %s" % _short(dir))
+		return errors
+	errors.append_array(scan_folder(dir))
 	if not errors.is_empty():
 		return errors
-	errors.append_array(check_team(formation.load_scripts()))
+
+	if not ResourceLoader.exists(Team.path_of(github)):
+		errors.append("找不到 %s，可以照 teams/example/team.gd 寫一個" % _short(Team.path_of(github)))
+		return errors
+	var team: Team = Team.load_folder(github)
+	if team == null:
+		errors.append("%s 要 extends Team" % _short(Team.path_of(github)))
+		return errors
+	if team.github != github:
+		errors.append("%s：github 要寫 \"%s\"（和資料夾名稱一樣），現在是 \"%s\""
+				% [_short(Team.path_of(github)), github, team.github])
+	errors.append_array(check_team(team.members, dir))
 	return errors
 
 
-## 格子座標要在棋盤內、不能重疊，腳本要讀得到（Boss 的陣型也用這個檢查）
-static func check_cells(formation: Formation) -> Array[String]:
-	var errors: Array[String] = formation.errors.duplicate()
-	var used: Dictionary = {}
-	for slot: Formation.Slot in formation.slots:
-		var where: String = "%s（col %d, row %d）" % [_short(slot.path), slot.cell.x, slot.cell.y]
-		if not Rules.is_valid_cell(slot.cell):
-			errors.append("%s：格子要在 %d×%d 棋盤裡（col 0–%d、row 0–%d）"
-					% [where, Rules.GRID_COLS, Rules.GRID_ROWS, Rules.GRID_COLS - 1, Rules.GRID_ROWS - 1])
-		elif used.has(slot.cell):
-			errors.append("%s：和 %s 站在同一格 %s" % [where, _short(used[slot.cell]), Rules.cell_name(slot.cell)])
-		else:
-			used[slot.cell] = slot.path
-		if not ResourceLoader.exists(slot.path) or not load(slot.path) is Script:
-			errors.append("%s：讀不到這個角色腳本" % where)
-	return errors
-
-
-static func check_team(members: Array) -> Array[String]:
+## 檢查角色：要在自己的資料夾裡、數值範圍、站位、預算
+static func check_team(members: Array, dir: String) -> Array[String]:
 	var errors: Array[String] = []
 	if members.is_empty():
-		errors.append("隊伍是空的，請用陣型編輯器把角色拖到棋盤上")
+		errors.append("隊伍是空的，請在 team.gd 的 members 加入角色")
 		return errors
 	if members.size() > Rules.MAX_UNITS:
 		errors.append("隊伍最多 %d 隻，現在有 %d 隻" % [Rules.MAX_UNITS, members.size()])
 
-	var total := 0
+	var total: int = 0
 	var receipt: Array[String] = []
-	var scanned := {}
-	for i in members.size():
-		var script := members[i] as Script
+	var used: Dictionary = {}       # 格子 -> 站在那裡的角色名稱
+	for i: int in members.size():
+		var script: Script = members[i] as Script
 		if script == null:
-			errors.append("陣型第 %d 隻不是角色腳本" % (i + 1))
+			errors.append("members 第 %d 個不是角色腳本" % (i + 1))
 			continue
-		# 整條繼承鏈都要掃（學員可能繼承自己或範例的角色）
-		var current := script
-		while current != null and not current.resource_path.begins_with("res://framework/"):
-			if not scanned.has(current.resource_path):
-				scanned[current.resource_path] = true
-				errors.append_array(check_source(current.resource_path))
-			current = current.get_base_script()
+		if not script.resource_path.begins_with(dir + "/"):
+			errors.append("%s：角色要放在自己的資料夾 %s/ 裡" % [_short(script.resource_path), _short(dir)])
+			continue
 
-		var unit = script.new()
+		var unit: Object = script.new()
 		if not unit is Unit:
-			errors.append("%s 要 extends Unit" % _short(script.resource_path))
+			errors.append("%s 要 extends Unit 或某個職業" % _short(script.resource_path))
 			if unit is Node:
-				unit.free()
+				(unit as Node).free()
 			continue
 		if unit is Boss:
 			errors.append("%s 不能繼承 Boss" % _short(script.resource_path))
-		var label := "%s（%s）" % [unit.unit_name, _short(script.resource_path)]
+		var label: String = "%s（%s）" % [unit.unit_name, _short(script.resource_path)]
 		if unit.max_hp < Rules.MAX_HP_MIN or unit.max_hp > Rules.MAX_HP_MAX:
 			errors.append("%s：max_hp 要在 %d–%d 之間，現在是 %d"
 					% [label, Rules.MAX_HP_MIN, Rules.MAX_HP_MAX, unit.max_hp])
 		if unit.attack < Rules.ATTACK_MIN or unit.attack > Rules.ATTACK_MAX:
 			errors.append("%s：attack 要在 %d–%d 之間，現在是 %d"
 					% [label, Rules.ATTACK_MIN, Rules.ATTACK_MAX, unit.attack])
-		var cost := Rules.unit_cost(unit.max_hp, unit.attack)
+		var cell: Vector2i = unit.grid_position
+		if not Rules.is_valid_cell(cell):
+			errors.append("%s：請在 _init() 設定 grid_position，x 和 y 都要是 0–2，現在是 (%d, %d)"
+					% [label, cell.x, cell.y])
+		elif used.has(cell):
+			errors.append("%s：和 %s 站在同一格 %s" % [label, used[cell], Rules.cell_name(cell)])
+		else:
+			used[cell] = unit.unit_name
+		var cost: int = Rules.unit_cost(unit.max_hp, unit.attack)
 		total += cost
 		receipt.append("%s %d+2×%d=%d" % [unit.unit_name, unit.max_hp, unit.attack, cost])
-		unit.free()
+		(unit as Node).free()
 
 	if total > Rules.BUDGET:
 		errors.append("總花費 %d 點，超過預算 %d 點：%s" % [total, Rules.BUDGET, "、".join(receipt)])
 	return errors
+
+
+## 只掃描程式碼、不執行；資料夾裡每個 .gd 都要通過
+static func scan_folder(dir: String) -> Array[String]:
+	var errors: Array[String] = []
+	for path: String in gd_files(dir):
+		errors.append_array(check_source(path))
+	return errors
+
+
+## 資料夾裡（包含子資料夾）所有 .gd 檔
+static func gd_files(dir: String) -> Array[String]:
+	var files: Array[String] = []
+	for file_name: String in DirAccess.get_files_at(dir):
+		if file_name.ends_with(".gd"):
+			files.append("%s/%s" % [dir, file_name])
+	for sub: String in DirAccess.get_directories_at(dir):
+		files.append_array(gd_files("%s/%s" % [dir, sub]))
+	return files
 
 
 ## 總花費明細，例如「騎士 28 + 史萊姆 18 = 46 / 100」

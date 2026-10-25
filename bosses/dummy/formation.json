@@ -1,9 +1,0 @@
-{
-	"units": [
-		{
-			"script": "res://bosses/dummy/boss.gd",
-			"col": 1,
-			"row": 0
-		}
-	]
-}

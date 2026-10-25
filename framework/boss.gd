@@ -14,6 +14,7 @@ var damage_taken_multiplier := 1    # 受到的傷害倍率
 func _init() -> void:
 	body_radius = 52.0
 	color = Color("#d9534f")
+	grid_position = Vector2i(1, 0)      # 預設站前排中，子類別可以在 _init() 改
 
 
 ## 每回合開始、攻擊之前呼叫

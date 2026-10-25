@@ -10,6 +10,7 @@ extends Node2D
 ##         unit_name = "史萊姆"
 ##         max_hp = 12
 ##         attack = 3
+##         grid_position = Vector2i(1, 0)   # 站前排中間
 ##
 ##     func on_hurt(amount: int, source: Unit) -> void:
 ##         heal(self, 1)
@@ -20,7 +21,6 @@ var _framework_locked := false
 var _framework_dead := false
 var _framework_battle: Battle = null
 var _framework_team := 0
-var _framework_cell := Vector2i.ZERO
 
 # --- 屬性（學員在子類別的 _init() 設定，validator 會檢查預算）---
 var unit_name: String = "Unit"
@@ -38,6 +38,13 @@ var attack: int = 2:
 			return
 		attack = value
 		queue_redraw()
+## 站在棋盤哪一格：x 是行（0 左、1 中、2 右），y 是排（0 前排、1 中排、2 後排）
+var grid_position: Vector2i = Vector2i(-1, -1):
+	set(value):
+		if _framework_locked and not _framework_writing:
+			_framework_reject("戰鬥開始後不能移動！")
+			return
+		grid_position = value
 
 # --- 外觀（不影響戰鬥，隨便改）---
 var color: Color = Color("#6cb4ee")
@@ -113,7 +120,7 @@ func get_slot() -> int:
 
 ## 自己站的格子：x 是行（0 左、1 中、2 右），y 是排（0 前排、1 中排、2 後排）
 func get_grid_position() -> Vector2i:
-	return _framework_cell
+	return grid_position
 
 ## 上下左右相鄰、還活著的隊友（不含自己）
 func get_adjacent_allies() -> Array[Unit]:

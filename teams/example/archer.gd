@@ -9,6 +9,7 @@ func _init() -> void:
 	max_hp = 10
 	attack = 4
 	color = Color("#ffcc80")
+	grid_position = Vector2i(1, 2)   # 後排中
 
 
 func choose_target(enemies: Array[Unit]) -> Unit:

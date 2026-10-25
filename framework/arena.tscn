@@ -55,4 +55,4 @@ offset_right = 1136.0
 offset_bottom = 642.0
 theme_override_colors/font_color = Color(1, 1, 1, 0.5)
 theme_override_font_sizes/font_size = 14
-text = "R 重新開始　　Esc 回陣型編輯器　　空白鍵 暫停　　1 / 2 / 3 切換速度　　右邊是戰鬥紀錄，往上捲可以看完整過程"
+text = "R 重新開始　　Esc 回陣型預覽　　空白鍵 暫停　　1 / 2 / 3 切換速度　　右邊是戰鬥紀錄，往上捲可以看完整過程"

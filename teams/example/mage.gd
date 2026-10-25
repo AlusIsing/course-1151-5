@@ -9,3 +9,4 @@ func _init() -> void:
 	max_hp = 10
 	attack = 3
 	color = Color("#9575cd")
+	grid_position = Vector2i(2, 1)   # 中排右
