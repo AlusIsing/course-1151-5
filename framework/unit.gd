@@ -29,6 +29,8 @@ var _framework_battle: Battle = null
 var _framework_team := 0
 var _framework_poisons: Array[Dictionary] = []   # 每層中毒：{amount, turns, source, team}
 var _framework_soul := 0                         # 死靈的靈魂能量，只在 on_death 期間有
+var _framework_token := false                    # summon_token 召喚的分身（沒有職業被動）
+var _framework_passive_icon := ""                # 還沒用掉的一次性被動（戰士衝鋒、刺客閃避），畫在身體左下
 
 # --- 屬性（學員在子類別的 _init() 設定，validator 會檢查預算）---
 var unit_name: String = "Unit"
@@ -300,3 +302,6 @@ func _draw() -> void:
 	if curse_points > 0:
 		draw_string(font, Vector2(r + 4.0, 18.0), "💀+%d" % curse_points,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#ce93d8"))
+	if _framework_passive_icon != "":
+		draw_string(font, Vector2(-r - 46.0, 26.0), _framework_passive_icon,
+				HORIZONTAL_ALIGNMENT_RIGHT, 42.0, 16, Color("#ffd75e"))

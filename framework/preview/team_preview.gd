@@ -251,6 +251,9 @@ func _member_entry(info: UnitInfo) -> Control:
 	var label: Label = Label.new()
 	label.text = "%s%s（%s）　%s\n攻 %d　血 %d　花費 %d　流派 %s　　%s" % [_icon(info.school), info.name, info.role,
 			Rules.cell_label(info.cell), info.attack, info.max_hp, info.cost, Rules.SCHOOL_NAMES[info.school], info.path.get_file()]
+	var passive: String = Rules.passive_text(info.role)
+	if passive != "":
+		label.text += "\n被動　%s" % passive
 	panel.add_child(label)
 	return panel
 

@@ -13,6 +13,13 @@ const ROW_NAMES: Array[String] = ["前排", "中排", "後排"]
 const COL_NAMES: Array[String] = ["左", "中", "右"]
 const TANK_SHARE_PERCENT := 50  # 坦克替相鄰隊友分擔的傷害比例（無條件捨去）
 
+# --- 職業被動（不用寫程式，選了職業就有；召喚的分身和 Boss 沒有）---
+const WARRIOR_CHARGE := 2       # 戰士「衝鋒」：每場第一次普攻傷害 +2
+const ARCHER_WEAK_SPOT := 1     # 射手「弱點射擊」：普攻血量低於一半的目標傷害 +1
+const MAGE_ENERGY_REGEN := 4    # 法師「法力湧流」：每回合回復的能量（補師沒有）
+const HEALER_CLEANSE := 1       # 補師「淨化」：普通治療時，順便移除目標幾層中毒
+# 刺客「閃避」：每場第一次被普攻打中時不受傷害；坦克「掩護」見 TANK_SHARE_PERCENT
+
 # --- 預算：cost = max_hp × HP_COST + attack × ATTACK_COST ---
 const BUDGET := 100
 const HP_COST := 1
@@ -64,6 +71,23 @@ static func school_bonus_text(school: int) -> Array[String]:
 		4:
 			return ["死靈角色死亡時獲得 %d 點靈魂能量" % NECRO_SOUL, "死靈角色死亡時對全體敵人造成 %d 點傷害" % NECRO_BLAST]
 	return []
+
+## 職業被動的說明，role 是 get_role() 回傳的職業名稱
+static func passive_text(role: String) -> String:
+	match role:
+		"戰士":
+			return "衝鋒：每場第一次普攻傷害 +%d" % WARRIOR_CHARGE
+		"坦克":
+			return "掩護：替上下左右相鄰的隊友分擔 %d%% 傷害" % TANK_SHARE_PERCENT
+		"射手":
+			return "弱點射擊：普攻血量低於一半的目標傷害 +%d" % ARCHER_WEAK_SPOT
+		"法師":
+			return "法力湧流：每回合回復 %d 能量（一般是 %d）" % [MAGE_ENERGY_REGEN, ENERGY_REGEN]
+		"補師":
+			return "淨化：普通治療時順便移除 %d 層中毒" % HEALER_CLEANSE
+		"刺客":
+			return "閃避：每場第一次被普攻打中時不受傷害"
+	return ""
 
 const TEAMS_DIR := "res://teams"      # 每個人一個資料夾，用 GitHub 帳號命名
 const DEFAULT_TEAM := "example"

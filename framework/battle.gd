@@ -15,8 +15,10 @@ extends RefCounted
 ## 死亡引起的連鎖全部結算完，才輪到下一個動作。
 ##
 ## 每一次傷害照這個順序結算（_apply_damage）：
+##   0. 刺客的閃避：每場第一次被普攻打中時整次不算（不消耗詛咒、護盾，坦克也不分擔）
 ##   1. 基礎傷害（普攻是 attack，技能是指定的 amount）
-##   2. 攻擊者的增傷（狂血 4 隻：血量低於一半 +2，只有普攻）；Boss 的受傷倍率也在這一步
+##   2. 攻擊者的增傷，只有普攻：狂血 4 隻（血量低於一半 +2）、戰士的衝鋒、射手的弱點射擊；
+##      Boss 的受傷倍率也在這一步
 ##   3. 加上目標身上的詛咒，並消耗詛咒
 ##   4. 扣護盾（毒傷跳過這一步）
 ##   5. 坦克分擔：目標相鄰有我方坦克時，坦克承受 TANK_SHARE_PERCENT%（目標本身是坦克時不分擔）
@@ -42,6 +44,14 @@ extends RefCounted
 ##   法師：敵方同一行的所有角色；同一行沒人就打最近的一行
 ##   補師：不攻擊，幫相鄰有受傷的隊友回 attack 點血
 ##   坦克另外會替相鄰的隊友分擔 TANK_SHARE_PERCENT% 的傷害
+##
+## 職業被動（數值在 Rules，召喚的分身和 Boss 沒有）：
+##   戰士「衝鋒」：每場第一次普攻 +WARRIOR_CHARGE（直接 extends Unit 的角色也算戰士）
+##   坦克「掩護」：上面的分擔傷害
+##   射手「弱點射擊」：普攻血量低於一半的目標 +ARCHER_WEAK_SPOT
+##   法師「法力湧流」：每回合回復 MAGE_ENERGY_REGEN 能量（補師沒有）
+##   補師「淨化」：普通治療有回到血時，移除目標 HEALER_CLEANSE 層中毒（被劇毒擋下治療就不會淨化）
+##   刺客「閃避」：每場第一次被普攻打中時不受傷害
 ##
 ## 規則細節：
 ##   - 血量歸零的角色只會再觸發 on_death，其他事件都不會觸發
@@ -265,7 +275,18 @@ func _heal_neighbors(healer: Unit) -> void:
 		if first:
 			unit_acted.emit(healer, ally)
 			first = false
-		_restore(ally, healer.attack, "%s 治療 %s，回了 %d 血（%d/%d）", healer)
+		if _restore(ally, healer.attack, "%s 治療 %s，回了 %d 血（%d/%d）", healer) > 0:
+			_cleanse(healer, ally)
+
+
+## 補師的淨化：移除最早的 HEALER_CLEANSE 層中毒
+func _cleanse(healer: Unit, ally: Unit) -> void:
+	var removed: int = mini(Rules.HEALER_CLEANSE, ally._framework_poisons.size())
+	if removed <= 0:
+		return
+	ally._framework_poisons = ally._framework_poisons.slice(removed)
+	ally.queue_redraw()
+	_log("%s 淨化了 %s 的 %d 層毒（剩 %d 層）" % [_n(healer), _n(ally), removed, ally._framework_poisons.size()])
 
 
 ## 回血（不超過 max_hp），中了劇毒 4 隻的毒就不會回。回傳實際回了多少。
@@ -460,9 +481,24 @@ func _fire(unit: Unit, method: String, args: Array) -> void:
 func _apply_damage(target: Unit, amount: int, source: Unit, verb: String, kind: int = KIND_SKILL) -> Array:
 	if not target.is_alive() or amount <= 0:
 		return []
+	# 0. 刺客的閃避
+	if kind == KIND_ATTACK and target is Assassin and target._framework_passive_icon != "":
+		target._framework_passive_icon = ""
+		target.queue_redraw()
+		_log("%s 閃避了 %s 的攻擊！" % [_n(target), _n(source)])
+		return []
 	# 2. 攻擊者的增傷、Boss 的受傷倍率
-	if kind == KIND_ATTACK and _fury(source):
-		amount += Rules.BLOOD_FURY
+	if kind == KIND_ATTACK:
+		if _fury(source):
+			amount += Rules.BLOOD_FURY
+		if _is_warrior(source) and source._framework_passive_icon != "":
+			source._framework_passive_icon = ""
+			source.queue_redraw()
+			amount += Rules.WARRIOR_CHARGE
+			verb = "衝鋒" + verb
+		elif source is Archer and target.hp * 2 < target.max_hp:
+			amount += Rules.ARCHER_WEAK_SPOT
+			verb = "弱點" + verb
 	var boss := target as Boss
 	if boss:
 		if kind == KIND_ATTACK and boss.attack_damage_percent != 100:
@@ -499,6 +535,12 @@ func _apply_damage(target: Unit, amount: int, source: Unit, verb: String, kind: 
 		unit_damaged.emit(tank, shared)
 		hurt.append([tank, shared, before - tank.hp])
 	return hurt
+
+
+## 算戰士的角色：不是其他職業、不是 Boss、不是召喚的分身（直接 extends Unit 的也算）
+func _is_warrior(unit: Unit) -> bool:
+	return unit != null and not (unit is Boss or unit is Tank or unit is Archer or unit is Mage or unit is Assassin) \
+			and not unit._framework_token
 
 
 ## 狂血 4 隻：血量低於一半的角色普攻 +2
@@ -694,6 +736,7 @@ func api_summon_token(caller: Unit, token_hp: int, token_attack: int) -> bool:
 		return false
 	_token_budget[caller] -= cost
 	var token := Unit.new()
+	token._framework_token = true
 	token.unit_name = caller.unit_name + "分身"
 	token.max_hp = token_hp
 	token.attack = token_attack
@@ -840,6 +883,12 @@ func _add_unit(unit: Unit, team: int, cell: Vector2i) -> void:
 	unit.grid_position = cell
 	_write(unit, "hp", unit.max_hp)
 	_write(unit, "energy", 0 if unit is Boss else Rules.ENERGY_START)
+	if unit is Mage and not unit is Healer:
+		_write(unit, "energy_regen", Rules.MAGE_ENERGY_REGEN)
+	elif _is_warrior(unit):
+		unit._framework_passive_icon = "⚡"
+	elif unit is Assassin:
+		unit._framework_passive_icon = "💨"
 	unit._framework_locked = true
 	roster.append(unit)
 	# 照行動順序插進去，get_alive() 就不用每次排序
