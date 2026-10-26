@@ -105,10 +105,11 @@ static func check_team(members: Array, dir: String) -> Array[String]:
 			errors.append("%s：school 要是 School.NONE、VENOM、AEGIS、BLOOD、NECRO 其中一個" % label)
 		var cell: Vector2i = unit.grid_position
 		if not Rules.is_valid_cell(cell):
-			errors.append("%s：請在 _init() 設定 grid_position，x 和 y 都要是 0–2，現在是 (%d, %d)"
+			errors.append("%s：請在 _init() 設定 grid_position = Vector2i(行, 排)，行是左右、排是前後，都要是 0–2，現在是 Vector2i(%d, %d)"
 					% [label, cell.x, cell.y])
 		elif used.has(cell):
-			errors.append("%s：和 %s 站在同一格 %s" % [label, used[cell], Rules.cell_name(cell)])
+			errors.append("%s：和 %s 站在同一格 %s，請換一個空格（陣型預覽的空格上有寫座標）"
+					% [label, used[cell], Rules.cell_label(cell)])
 		else:
 			used[cell] = unit.unit_name
 		var cost: int = Rules.unit_cost(unit.max_hp, unit.attack)

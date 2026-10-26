@@ -98,6 +98,11 @@ static func cell_name(cell: Vector2i) -> String:
 	return ROW_NAMES[cell.y] + COL_NAMES[cell.x]
 
 
+## 格子名稱加上可以直接照抄的座標，例如 Vector2i(0, 0) →「前排左 Vector2i(0, 0)」
+static func cell_label(cell: Vector2i) -> String:
+	return "%s Vector2i(%d, %d)" % [cell_name(cell), cell.x, cell.y]
+
+
 ## 流派加成的等級：0 沒有、1 是 2 隻加成、2 是 4 隻加成
 static func school_tier(count: int) -> int:
 	var tier: int = 0

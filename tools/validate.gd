@@ -157,7 +157,7 @@ func _check_team() -> bool:
 	section.lines.append("%s：%s" % [team.label(), Validator.describe_cost(team.members)])
 	for script: Script in team.members:
 		var unit: Unit = script.new()
-		section.lines.append("%s（%s）站在 %s" % [unit.unit_name, unit.get_role(), Rules.cell_name(unit.grid_position)])
+		section.lines.append("%s（%s）站在 %s" % [unit.unit_name, unit.get_role(), Rules.cell_label(unit.grid_position)])
 		unit.free()
 	return true
 

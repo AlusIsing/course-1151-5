@@ -195,11 +195,12 @@ func _show(title: String, errors: Array[String]) -> void:
 			style.bg_color = Color(1, 1, 1, 0.04)
 			style.border_color = Color(1, 1, 1, 0.12)
 			label.text = "%s\nVector2i(%d, %d)" % [Rules.cell_name(cell), cell.x, cell.y]
-			label.add_theme_color_override("font_color", Color(1, 1, 1, 0.25))
+			label.add_theme_color_override("font_color", Color(1, 1, 1, 0.4))
 		else:
 			style.bg_color = info.color.darkened(0.6)
 			style.border_color = info.color
-			label.text = "%s%s\n%s　攻 %d　血 %d\n%d 點" % [_icon(info.school), info.name, info.role, info.attack, info.max_hp, info.cost]
+			label.text = "%s%s\n%s　攻 %d　血 %d\n%d 點　Vector2i(%d, %d)" % [_icon(info.school), info.name, info.role,
+					info.attack, info.max_hp, info.cost, cell.x, cell.y]
 			label.add_theme_color_override("font_color", Color.WHITE)
 		(label.get_parent() as PanelContainer).add_theme_stylebox_override("panel", style)
 
@@ -247,7 +248,7 @@ func _member_entry(info: UnitInfo) -> Control:
 	panel.add_theme_stylebox_override("panel", style)
 	var label: Label = Label.new()
 	label.text = "%s%s（%s）　%s\n攻 %d　血 %d　花費 %d　流派 %s　　%s" % [_icon(info.school), info.name, info.role,
-			Rules.cell_name(info.cell), info.attack, info.max_hp, info.cost, Rules.SCHOOL_NAMES[info.school], info.path.get_file()]
+			Rules.cell_label(info.cell), info.attack, info.max_hp, info.cost, Rules.SCHOOL_NAMES[info.school], info.path.get_file()]
 	panel.add_child(label)
 	return panel
 
