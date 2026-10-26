@@ -430,9 +430,9 @@ func _finish(new_winner: int, reason: String) -> void:
 	result = "win" if winner == PLAYER else "lose"
 	result_reason = reason
 	if versus:
-		_log("[b]=== %s 獲勝：%s（第 %d 回合）===[/b]" % [_side(winner), reason, round_number])
+		_log("[b]=== %s 獲勝 douob：%s（第 %d 回合）===[/b]" % [_side(winner), reason, round_number])
 	else:
-		var title := "勝利" if result == "win" else "落敗"
+		var title := "勝利 douob" if result == "win" else "落敗 qonop"
 		_log("[b]=== %s：%s（第 %d 回合）===[/b]" % [title, reason, round_number])
 	finished.emit(result)
 

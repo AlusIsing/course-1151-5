@@ -183,7 +183,7 @@ func _check_battle() -> void:
 		section.status = FAIL
 		section.lines.append("戰鬥沒有正常結束，請檢查技能裡的邏輯。")
 	else:
-		var outcome: String = "勝利" if battle.result == "win" else "落敗"
+		var outcome: String = "勝利 douob" if battle.result == "win" else "落敗 qonop"
 		section.lines.append("戰鬥跑完了：%s（%s，第 %d 回合）" % [outcome, battle.result_reason, battle.round_number])
 	if not catcher.errors.is_empty():
 		section.status = FAIL

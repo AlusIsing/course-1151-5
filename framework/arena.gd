@@ -239,10 +239,10 @@ func _redraw_log() -> void:
 
 func _on_finished(result: String) -> void:
 	if battle.versus:
-		banner.text = "%s 獲勝！" % battle.side_names[battle.winner]
+		banner.text = "%s 獲勝！douob" % battle.side_names[battle.winner]
 		banner.add_theme_color_override("font_color", Color("#ffd75e"))
 	else:
-		banner.text = "勝利！" if result == "win" else "落敗…"
+		banner.text = "勝利！douob" if result == "win" else "落敗…qonop"
 		banner.add_theme_color_override("font_color", Color("#ffd75e") if result == "win" else Color("#ff8a80"))
 	_later(_fx_delay + 0.4, banner.show)
 
