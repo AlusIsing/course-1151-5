@@ -20,7 +20,7 @@ func on_battle_start() -> void:
 
 
 func on_hurt(_amount: int, _source: Unit) -> void:
-	if is_alive() and hp <= 3 and get_energy() > 0:
+	if is_alive() and hp <= 3 and get_energy() > 0 and get_poison_stacks() == 0:
 		heal(self, mini(3, get_energy()))
 
 
