@@ -377,11 +377,21 @@ godot --headless --script res://tools/boss_check.gd
    godot --headless --script res://tools/validate.gd -- 你的GitHub帳號
    ```
 
-   這份 README 裡的 `godot` 指的是 Godot 執行檔，要在**專案資料夾**裡執行。沒有把 Godot 加進 PATH 的話，請換成完整路徑；Windows 要用檔名有 `console` 的那個，才看得到輸出：
+   這份 README 裡的 `godot` 指的是 Godot 執行檔，要在**專案資料夾**裡執行。沒有把 Godot 加進 PATH 的話，請換成完整路徑：
+
+   **Windows（PowerShell）**：要用檔名有 `console` 的那個，才看得到輸出
 
    ```powershell
    & "C:\你放Godot的地方\Godot_v4.7.2-stable_win64_console.exe" --headless --script res://tools/validate.gd -- 你的GitHub帳號
    ```
+
+   **Mac（終端機）**：執行檔在 `Godot.app` 裡面，Godot 放在「應用程式」的話是
+
+   ```sh
+   /Applications/Godot.app/Contents/MacOS/Godot --headless --script res://tools/validate.gd -- 你的GitHub帳號
+   ```
+
+   Mac 想直接打 `godot` 的話，先執行一次 `echo 'alias godot="/Applications/Godot.app/Contents/MacOS/Godot"' >> ~/.zshrc`，再開一個新的終端機視窗。
 
    不在專案資料夾裡的話，在 `--headless` 後面加上 `--path "專案資料夾路徑"`。
 

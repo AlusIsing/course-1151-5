@@ -192,7 +192,12 @@ func on_attack(target: Unit) -> void:
 
 ## 檢查與測試
 
-在**專案根目錄**執行（`godot` 換成 Godot 執行檔；Windows 用完整路徑，要用檔名有 `console` 的那個，例如 `& "C:\Godot\Godot_v4.7.2-stable_win64_console.exe" --headless ...`）：
+在**專案根目錄**執行。`godot` 換成 Godot 執行檔，沒有加進 PATH 就用完整路徑：
+
+- Windows（PowerShell）：要用檔名有 `console` 的那個，前面加 `&`，例如 `& "C:\Godot\Godot_v4.7.2-stable_win64_console.exe" --headless ...`
+- Mac（終端機）：執行檔在 app 裡面，例如 `/Applications/Godot.app/Contents/MacOS/Godot --headless ...`
+
+先問學員用哪種電腦，再給對應的指令。
 
 ```sh
 godot --headless --script res://tools/validate.gd -- 帳號              # 和 PR 自動檢查一樣：掃描、語法、隊伍設定、試打 Lv1
