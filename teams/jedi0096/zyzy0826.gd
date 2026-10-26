@@ -20,7 +20,7 @@ func on_battle_start() -> void:
 
 
 func on_hurt(_amount: int, source: Unit) -> void:
-	if is_alive() and hp <= 5 and get_energy() > 0:
+	if is_alive() and hp <= 5 and get_energy() > 0 and get_poison_stacks() == 0:
 		say("還沒結束！")
 		heal(self, mini(5, get_energy()))      # 瀕死自救
 		return
@@ -35,8 +35,8 @@ func on_death() -> void:
 		deal_damage(target, 5)                 # 靈魂爆發 第一擊
 		if not target.is_alive():
 			target = _weakest_enemy()
-		if target != null:
-			deal_damage(target, 5)             # 靈魂爆發 第二擊（能量夠才會成功）
+		if target != null and get_energy() > 0:
+			deal_damage(target, mini(5, get_energy()))   # 靈魂爆發 第二擊（剩多少能量打多少）
 	summon_token(4, 3)                         # 亡魂分身（上限 hp + 2×attack ≤ 10）
 
 

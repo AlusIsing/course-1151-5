@@ -1,10 +1,10 @@
-extends Warrior
-## 小白（死靈戰士）：黑白雙煞的弟弟。攻擊後對目標下 3 層詛咒，讓下一擊更痛。
+extends Mage
+## 小白（死靈法師）：黑白雙煞的弟弟。攻擊後對目標下 3 層詛咒，讓下一擊更痛。
 ## 小黑倒下時覺醒加攻；自己倒下時靈魂爆發並召喚分身。
 ## 花費 = 8 + 2 × 4 = 16 點
 
 const PARTNER := "小黑"
-const ATK_LINES := ["喝啊啊啊！", "白光一閃！", "哥，看我的！", "這招你躲得掉嗎～？"]
+const ATK_LINES := ["賀啊啊啊！", "白光一閃！", "哥，看我的！", "這招你躲得掉嗎～？"]
 
 
 func _init() -> void:
@@ -17,7 +17,7 @@ func _init() -> void:
 
 
 func on_battle_start() -> void:
-	say("嘿嘿，黑白雙煞來囉！準備被打爆吧！")
+	say("嘻嘻，黑白雙煞來囉！準備被打爆吧！")
 
 
 func on_attack(target: Unit) -> void:
@@ -27,7 +27,7 @@ func on_attack(target: Unit) -> void:
 
 
 func on_hurt(_amount: int, _source: Unit) -> void:
-	if is_alive() and hp <= 3 and get_energy() > 0:
+	if is_alive() and hp <= 4 and get_energy() > 0 and get_poison_stacks() == 0:
 		heal(self, mini(3, get_energy()))
 
 

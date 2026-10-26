@@ -1,5 +1,5 @@
-extends Warrior
-## 小黑（死靈戰士）：黑白雙煞的哥哥。攻擊後對目標下 3 層詛咒，讓下一擊更痛。
+extends Mage
+## 小黑（死靈法師）：黑白雙煞的哥哥。攻擊後對目標下 3 層詛咒，讓下一擊更痛。
 ## 小白倒下時覺醒加攻；自己倒下時靈魂爆發並召喚分身。
 ## 花費 = 8 + 2 × 4 = 16 點
 
@@ -27,7 +27,7 @@ func on_attack(target: Unit) -> void:
 
 
 func on_hurt(_amount: int, _source: Unit) -> void:
-	if is_alive() and hp <= 3 and get_energy() > 0:
+	if is_alive() and hp <= 4 and get_energy() > 0 and get_poison_stacks() == 0:
 		heal(self, mini(3, get_energy()))
 
 
