@@ -31,6 +31,18 @@ var _lines: Array[String] = []    # 全部的戰鬥紀錄，切換 compact 時�
 var _timer: float = 0.0
 var _wait: float = STEP_TIME
 var _fx_delay: float = 0.0        # 這回合下一個畫面效果要延遲多久才播
+var _copy_button: Button
+
+
+func _ready() -> void:
+	# 複製整場戰鬥紀錄到剪貼簿，方便貼給 AI 或同學看
+	_copy_button = Button.new()
+	_copy_button.text = "複製紀錄"
+	_copy_button.focus_mode = Control.FOCUS_NONE   # 不搶焦點，空白鍵才會是暫停而不是按按鈕
+	_copy_button.position = Vector2(1032.0, 614.0)
+	_copy_button.size = Vector2(108.0, 30.0)
+	_copy_button.pressed.connect(_copy_log)
+	$UI.add_child(_copy_button)
 
 
 ## 我方隊伍挑戰 Boss
@@ -90,6 +102,7 @@ func _start(new_battle: Battle) -> void:
 func set_compact(value: bool) -> void:
 	compact = value
 	help_label.visible = not compact
+	_copy_button.visible = not compact
 	title_label.add_theme_font_size_override("font_size", 34 if compact else 20)
 	log_label.add_theme_font_size_override("normal_font_size", 26 if compact else 16)
 	log_label.add_theme_font_size_override("bold_font_size", 26 if compact else 16)
@@ -235,6 +248,17 @@ func _redraw_log() -> void:
 	var shown: Array[String] = _lines.slice(-COMPACT_LINES) if compact else _lines
 	for line: String in shown:
 		log_label.append_text(line + "\n")
+
+
+## 去掉顏色、粗體等 BBCode，標題放第一行
+func _copy_log() -> void:
+	var tags: RegEx = RegEx.create_from_string(r"\[/?(b|i|u|color)(=[^\]]*)?\]")
+	var text: String = tags.sub("\n".join(_lines), "", true).replace("[lb]", "[").replace("[rb]", "]")
+	DisplayServer.clipboard_set("%s\n%s" % [title_label.text, text])
+	_copy_button.text = "已複製 douob"
+	var tween: Tween = create_tween()
+	tween.tween_interval(1.5)
+	tween.tween_callback(func() -> void: _copy_button.text = "複製紀錄")
 
 
 func _on_finished(result: String) -> void:
