@@ -9,7 +9,7 @@ extends SceneTree
 ## 印出每隻 Boss 被純數值隊伍打贏的比例、打贏的組法，以及有技能的隊伍的戰績。
 
 const ROLES: Array[String] = ["Warrior", "Tank", "Archer", "Mage", "Healer", "Assassin"]
-const DEFAULT_TEAMS: Array[String] = ["example", "example_venom", "example_aegis", "example_blood", "example_necro"]
+const DEFAULT_TEAMS: Array[String] = ["example", "example_stage2", "example_venom", "example_aegis", "example_blood", "example_necro"]
 const DEFAULT_RANDOM := 1000
 const SHOW_WINNERS := 3
 

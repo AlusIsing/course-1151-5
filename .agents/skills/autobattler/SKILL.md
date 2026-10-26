@@ -188,6 +188,8 @@ func on_attack(target: Unit) -> void:
 | `lv2` 刺甲龜 | 被普攻打中會全額反彈；技能、毒不會被反彈 | 降低攻擊、改用技能打（`deal_damage`、`poison`…） |
 | `lv3` 雷神 | 平常普攻只造成一半傷害；每 3 回合蓄力（不攻擊、受傷 ×2、雷甲消失），下一回合雷擊全體 8 點 | 把能量存到蓄力回合一起用，用補血或護盾撐過雷擊 |
 
+學員卡在 Lv2 時，可以參考 `teams/example_stage2/`：盾兵 attack 0 擋前排，四個弓手 attack 1、`on_attack` 裡 `deal_damage(target, 3)`，只用基礎技能就打得贏。
+
 ## 檢查與測試
 
 在**專案根目錄**執行（`godot` 換成 Godot 執行檔；Windows 用完整路徑，要用檔名有 `console` 的那個，例如 `& "C:\Godot\Godot_v4.7.2-stable_win64_console.exe" --headless ...`）：

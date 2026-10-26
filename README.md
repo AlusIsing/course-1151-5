@@ -143,13 +143,23 @@ func cast(caster: Unit, target: Unit) -> void:
 ```gdscript
 # teams/zyzy0826/mage.gd
 extends Mage
+## 火球法師：普攻之後再丟一顆火球
 const Fireball = preload("skills/fireball.gd")
 
 var fireball = Fireball.new()
 
+func _init() -> void:
+	unit_name = "火球法師"
+	max_hp = 10
+	attack = 3
+	color = Color("#9575cd")
+	grid_position = Vector2i(2, 2)   # 後排右
+
 func on_attack(target: Unit) -> void:
 	fireball.cast(self, target)
 ```
+
+每個角色檔都要有 `_init()` 設定名字、數值和站位，不然會出現「請設定 grid_position」。
 
 也可以讓好幾隻角色繼承自己寫的父類別：`extends "my_base.gd"`。這時子類別的 `_init()` **第一行要寫 `super()`**，不然父類別 `_init()` 裡設定的數值不會生效。
 
@@ -347,6 +357,8 @@ Boss 也站在 3×3 棋盤上，預設站**前排中**，行為和戰士一樣�
 | `lv3` | 雷神 | 平常普攻只造成**一半**傷害；每 3 回合蓄力一次（不攻擊、受傷 ×2），下一回合雷擊打中你所有角色 | 階段 2：把能量留到蓄力回合，還要撐過雷擊 |
 
 Lv2、Lv3 是設計成**只調數值打不贏**的關卡，打輸了就看戰鬥紀錄，想想看要加什麼技能。
+
+卡在 Lv2 的話，可以參考 `teams/example_stage2/`：只用 `deal_damage()` 一招就打得贏刺甲龜，整個資料夾複製過去、改成自己的帳號就能用。
 
 講師可以用 `tools/boss_check.gd` 檢查 Boss 難度：它會產生上千支只有數值的隨機隊伍去打每隻 Boss，再讓同樣數值的隊伍加上基礎技能打一次：
 
