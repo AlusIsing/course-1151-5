@@ -1,6 +1,6 @@
 
 extends Team
-## 💀 死靈 5 隻：黑白雙煞、冰晶琉璃，隊長 zyzy0826。
+## 💀 死靈 5 隻：XiaoNas、typec、Alus、xinshoutw，隊長 red。
 ## 死靈 2 隻：倒下時得 6 點靈魂能量；4 隻：倒下時對全體敵人造成 1 點傷害。
 
    

@@ -1,29 +1,29 @@
 extends Mage
-## 小黑（死靈法師）：黑白雙煞的弟弟。攻擊後對目標下 4 層詛咒，讓下一擊更痛。
-## 小白倒下時覺醒加攻；自己倒下時靈魂爆發並召喚分身。
+## typec（死靈法師）：什麼事都要「展開說說」，和 XiaoNas 是搭檔。攻擊後對目標下 4 層詛咒，讓下一擊更痛。
+## XiaoNas 倒下時覺醒加攻；自己倒下時靈魂爆發並召喚分身。
 ## 花費 = 8 + 2 × 4 = 16 點
 
-const PARTNER := "小白"
-const ATK_LINES := ["……閉嘴，倒下。", "黑影斬。", "太慢了。", "你看不見我。"]
+const PARTNER := "XiaoNas"
+const ATK_LINES := ["展開說說？", "這招，我們展開說說。", "你這防禦……展開說說。", "說完了，倒下吧。"]
 
 
 func _init() -> void:
-	unit_name = "小黑"
+	unit_name = "typec"
 	max_hp = 8
 	attack = 4
 	color = Color("#212121")
-	grid_position = Vector2i(0, 0)   # 前排左（zyzy0826 掩護）
+	grid_position = Vector2i(0, 0)   # 前排左（red 掩護）
 	school = School.NECRO
 
 
 func on_battle_start() -> void:
-	say("黑與白，不可分割——黑白雙煞，參上！")
+	say("各位，今天這場我們展開說說。")
 
 
 func on_attack(target: Unit) -> void:
 	if target.is_alive() and get_energy() >= 4:
 		say(random_pick(ATK_LINES))
-		curse(target, 4)                       # 黑煞詛咒：目標下一次受傷 +4
+		curse(target, 4)                       # 展開詛咒：目標下一次受傷 +4
 
 
 func on_hurt(_amount: int, _source: Unit) -> void:
@@ -33,12 +33,12 @@ func on_hurt(_amount: int, _source: Unit) -> void:
 
 func on_ally_death(ally: Unit) -> void:
 	if ally.unit_name == PARTNER:
-		say("小白……！你們，全部都要陪葬！【黑煞・覺醒】")
+		say("XiaoNas……！這件事，我要跟你們好好展開說說！【展開・覺醒】")
 		buff_attack(self, 2)
 
 
 func on_death() -> void:
-	say("黑影……不滅。")
+	say("這個……下次再展開說說……")
 	var target := _weakest_enemy()
 	if target != null:
 		deal_damage(target, 5)

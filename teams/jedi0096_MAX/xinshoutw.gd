@@ -1,13 +1,13 @@
 extends Healer
-## 小yuri（死靈補師）：冰晶琉璃的琉璃。站正中央，每回合免費幫相鄰受傷的隊友回 attack 點血。
-## 開場補血量 +1；小冰倒下時再 +2；自己倒下時靈魂爆發並召喚分身。
+## xinshoutw（死靈補師）：愛喝酒、擅長跳躍攻擊。站正中央，每回合免費幫相鄰受傷的隊友回 attack 點血（請大家喝一杯）。
+## 開場補血量 +1；Alus 倒下時再 +2；倒下時跳躍攻擊血最少的敵人，自己倒下時靈魂爆發並召喚分身。
 ## 花費 = 6 + 2 × 10 = 26 點
 
-const PARTNER := "小冰"
+const PARTNER := "Alus"
 
 
 func _init() -> void:
-	unit_name = "小yuri"
+	unit_name = "xinshoutw"
 	max_hp = 6
 	attack = 10
 	color = Color("#f8bbd0")
@@ -16,6 +16,7 @@ func _init() -> void:
 
 
 func on_battle_start() -> void:
+	say("先乾一杯再上！")
 	buff_attack(self, 1)                       # 補血量 10 → 11
 
 
@@ -32,6 +33,7 @@ func on_ally_death(ally: Unit) -> void:
 func on_death() -> void:
 	var target := _weakest_enemy()
 	if target != null:
+		say("喝完這杯——跳躍攻擊！")
 		deal_damage(target, 5)
 	summon_token(4, 3)
 
