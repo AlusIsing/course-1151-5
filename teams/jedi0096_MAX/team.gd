@@ -1,7 +1,7 @@
 
 extends Team
-## 💀 死靈 5 隻：XiaoNas、typec、Alus、xinshoutw，隊長 red。
-## 死靈 2 隻：倒下時得 6 點靈魂能量；4 隻：倒下時對全體敵人造成 1 點傷害。
+## 🔥 狂血 2 隻：XiaoNas、typec（普攻命中後回血）
+## 🛡️ 聖盾 3 隻：red、Alus、xinshoutw（開場全隊 3 點護盾），隊長 red。
 
    
 func _init() -> void:

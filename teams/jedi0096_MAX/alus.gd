@@ -1,6 +1,6 @@
 extends Archer
-## Alus（死靈射手）：野豬騎士，騎著野豬在後排放箭。「野豬追獵」：優先射擊被 XiaoNas、typec 詛咒的敵人，
-## 沒有的話挑血最少的兩隻之一。攻擊後「獠牙彈射」：對另一隻敵人打 3 點（技能傷害會觸發對方 on_hurt，形成連鎖）。
+## Alus（聖盾射手）：野豬騎士，騎著野豬在後排放箭。挑血最少的兩隻敵人之一射擊。
+## 攻擊後「獠牙彈射」：對另一隻敵人打 3 點（技能傷害會觸發對方 on_hurt，形成連鎖）。
 ## 倒下時「野豬衝撞」：對血最少的兩隻敵人各打 3 點，再召喚分身。
 ## 花費 = 10 + 2 × 6 = 22 點
 
@@ -13,7 +13,7 @@ func _init() -> void:
 	attack = 6
 	color = Color("#81d4fa")
 	grid_position = Vector2i(1, 2)   # 後排中
-	school = School.NECRO
+	school = School.AEGIS
 
 
 func on_battle_start() -> void:
@@ -21,9 +21,6 @@ func on_battle_start() -> void:
 
 
 func choose_target(enemies: Array[Unit]) -> Unit:
-	var cursed: Array[Unit] = enemies.filter(func(e: Unit) -> bool: return e.curse_points > 0)
-	if not cursed.is_empty():
-		return random_pick(cursed)             # 野豬追獵：優先引爆搭檔們的詛咒
 	var sorted: Array[Unit] = enemies.duplicate()
 	sorted.sort_custom(func(a: Unit, b: Unit) -> bool: return a.hp < b.hp)
 	return random_pick(sorted.slice(0, 2))

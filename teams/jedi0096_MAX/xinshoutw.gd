@@ -1,6 +1,6 @@
 extends Healer
-## xinshoutw（死靈補師）：愛喝酒、擅長跳躍攻擊。站正中央，每回合免費幫相鄰受傷的隊友回 attack 點血（請大家喝一杯）。
-## 開場補血量 +1；Alus 倒下時再 +2；倒下時跳躍攻擊血最少的敵人，自己倒下時靈魂爆發並召喚分身。
+## xinshoutw（聖盾補師）：愛喝酒、擅長跳躍攻擊。站正中央，每回合免費幫相鄰受傷的隊友回 attack 點血（請大家喝一杯）。
+## 開場補血量 +1；Alus 倒下時再 +2；倒下時用剩下的能量跳躍攻擊血最少的敵人，再召喚分身。
 ## 花費 = 6 + 2 × 10 = 26 點
 
 const PARTNER := "Alus"
@@ -12,7 +12,7 @@ func _init() -> void:
 	attack = 10
 	color = Color("#f8bbd0")
 	grid_position = Vector2i(1, 1)   # 中排中（上下左右都補得到）
-	school = School.NECRO
+	school = School.AEGIS
 
 
 func on_battle_start() -> void:

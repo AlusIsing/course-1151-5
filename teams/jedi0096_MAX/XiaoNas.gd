@@ -1,6 +1,6 @@
 extends Mage
-## XiaoNas（死靈法師）：四海為家的流浪法師，和 typec 是搭檔。攻擊後對目標下 4 層詛咒，讓下一擊更痛。
-## typec 倒下時覺醒加攻；自己倒下時靈魂爆發並召喚分身。
+## XiaoNas（狂血法師）：四海為家的流浪法師，和 typec 是搭檔。攻擊後吸取目標 2 點血。
+## typec 倒下時覺醒加攻；自己倒下時用剩下的能量反擊並召喚分身。
 ## 花費 = 8 + 2 × 4 = 16 點
 
 const PARTNER := "typec"
@@ -13,7 +13,7 @@ func _init() -> void:
 	attack = 4
 	color = Color("#fafafa")
 	grid_position = Vector2i(2, 0)   # 前排右（red 掩護）
-	school = School.NECRO
+	school = School.BLOOD
 
 
 func on_battle_start() -> void:
@@ -23,7 +23,7 @@ func on_battle_start() -> void:
 func on_attack(target: Unit) -> void:
 	if target.is_alive() and get_energy() >= 4:
 		say(random_pick(ATK_LINES))
-		curse(target, 4)                       # 流浪詛咒：目標下一次受傷 +4
+		drain(target, 2)                       # 流浪吸血：打 2 點並吸回等量的血
 
 
 func on_hurt(_amount: int, _source: Unit) -> void:

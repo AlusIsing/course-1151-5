@@ -1,6 +1,6 @@
 extends Tank
-## red（死靈坦克）：晚泉法客，人稱奶龍。前排中，掩護相鄰隊友；被打就反擊，殘血時用能量自救。
-## 倒下時：靈魂能量爆發，對血最少的敵人打 5 + 5，再召喚分身。
+## red（聖盾坦克）：晚泉法客，人稱奶龍。前排中，掩護相鄰隊友；被打就反擊，殘血時用能量自救。
+## 倒下時：用剩下的能量爆發，對血最少的敵人最多打 5 + 5，再召喚分身。
 ## 花費 = 20 + 2 × 0 = 20 點
 
 const HURT_LINES := ["就這？奶龍不怕痛！", "晚泉法客，在此！", "後面的別怕，奶龍在！", "痛是痛，但你更痛。"]
@@ -12,7 +12,7 @@ func _init() -> void:
 	attack = 0
 	color = Color("#455a64")
 	grid_position = Vector2i(1, 0)   # 前排中
-	school = School.NECRO
+	school = School.AEGIS
 
 
 func on_battle_start() -> void:
@@ -32,11 +32,11 @@ func on_hurt(_amount: int, source: Unit) -> void:
 func on_death() -> void:
 	var target := _weakest_enemy()
 	if target != null:
-		deal_damage(target, 5)                 # 靈魂爆發 第一擊
+		deal_damage(target, 5)                 # 奶龍爆發 第一擊
 		if not target.is_alive():
 			target = _weakest_enemy()
 		if target != null and get_energy() > 0:
-			deal_damage(target, mini(5, get_energy()))   # 靈魂爆發 第二擊（剩多少能量打多少）
+			deal_damage(target, mini(5, get_energy()))   # 奶龍爆發 第二擊（剩多少能量打多少）
 	summon_token(4, 3)                         # 亡魂分身（上限 hp + 2×attack ≤ 10）
 
 
