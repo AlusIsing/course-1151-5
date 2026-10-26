@@ -233,7 +233,9 @@ func _show(title: String, errors: Array[String]) -> void:
 	for error: String in errors:
 		lines.append("[color=#ff8a80]✗ %s[/color]" % error)
 	if lines.is_empty():
-		lines.append("[color=#6ee36e]✓ 隊伍通過檢查，可以試打了[/color]")
+		lines.append("[color=#6ee36e]✓ 隊伍通過檢查，可以試打了 douob[/color]")
+	else:
+		lines.insert(0, "[color=#ff8a80]隊伍還沒通過檢查 qonop[/color]")
 	status_label.text = "\n".join(lines)
 
 

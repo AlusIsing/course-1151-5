@@ -207,7 +207,7 @@ func _report() -> String:
 	var icons: Dictionary = {PASS: "✅", FAIL: "❌", SKIP: "⏭️"}
 	var failed: bool = sections.any(func(s: Section) -> bool: return s.status == FAIL)
 	var out: Array[String] = []
-	out.append("## %s 隊伍檢查：`%s`" % ["❌" if failed else "✅", github])
+	out.append("## %s 隊伍檢查：`%s` %s" % ["❌" if failed else "✅", github, "qonop" if failed else "douob"])
 	out.append("")
 	out.append("| 檢查 | 結果 |")
 	out.append("|---|---|")

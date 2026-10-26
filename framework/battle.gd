@@ -342,7 +342,7 @@ func _resolve_deaths() -> void:
 			_tokens[unit] = []
 			_token_budget[unit] = Rules.TOKEN_BUDGET
 		for unit: Unit in dying:
-			_log("%s 倒下了" % _n(unit))
+			_log("%s 倒下了 qonop" % _n(unit))
 			var necro: int = school_tier(unit._framework_team, Unit.School.NECRO) if unit.school == Unit.School.NECRO else 0
 			if necro >= 1:
 				unit._framework_soul = Rules.NECRO_SOUL
@@ -725,7 +725,7 @@ func _spend(caller: Unit, cost: int, action: String) -> bool:
 		return true
 	var available: int = caller.energy + caller._framework_soul
 	if cost > available:
-		_log("%s 能量不足，%s失敗（需要 %d，只有 %d）" % [_n(caller), action, cost, available])
+		_log("%s 能量不足 qonop，%s失敗（需要 %d，只有 %d）" % [_n(caller), action, cost, available])
 		return false
 	var soul: int = mini(caller._framework_soul, cost)
 	caller._framework_soul -= soul

@@ -249,7 +249,7 @@ func _on_finished(result: String) -> void:
 
 func show_errors(errors: Array[String]) -> void:
 	title_label.text = "隊伍沒有通過檢查，改好程式後按 Esc 回陣型預覽"
-	banner.text = "無法上場"
+	banner.text = "無法上場 qonop"
 	banner.add_theme_color_override("font_color", Color("#ff8a80"))
 	banner.show()
 	for error: String in errors:
