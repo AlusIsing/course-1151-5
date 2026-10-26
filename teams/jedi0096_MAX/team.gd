@@ -6,7 +6,7 @@ extends Team
    
 func _init() -> void:
 	team_name = "MAX"
-	github = "jedi0096"            # 要和資料夾名稱一樣
+	github = "jedi0096_MAX"        # 要和資料夾名稱一樣
 	members = [
 		preload("XiaoNas.gd"),
 		preload("xinshoutw.gd"),

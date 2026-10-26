@@ -12,7 +12,7 @@ func _init() -> void:
 	max_hp = 8
 	attack = 4
 	color = Color("#fafafa")
-	grid_position = Vector2i(2, 1)   # 中排右
+	grid_position = Vector2i(2, 0)   # 前排右（zyzy0826 掩護）
 	school = School.NECRO
 
 
