@@ -21,9 +21,11 @@
 
 ### 建立自己的隊伍
 
-1. 複製 `teams/example/` 整個資料夾，改名成**你的 GitHub 帳號**，例如 `teams/zyzy0826/`
+1. 複製 `teams/template/` 整個資料夾，改名成**你的 GitHub 帳號**，例如 `teams/zyzy0826/`
 2. 打開裡面的 `team.gd`，把 `github` 改成你的帳號、`team_name` 改成你的隊名
 3. 回到陣型預覽，隊伍選單就會出現你的隊伍
+
+模板裡只有一隻小兵 `my_unit.gd`，連史萊姆王都打不贏。照[階段 1](#階段-1宣告物件)自己加角色、調數值和站位；`teams/example/` 可以參考，但請自己重寫一隊。
 
 你寫的所有東西（角色、技能、自己的父類別）都放在這個資料夾裡。
 
@@ -484,7 +486,9 @@ godot --headless --script res://tools/balance.gd -- --games=200
 ├── .github/workflows/        ← PR 自動檢查
 ├── bosses/<代號>/boss.gd     ← Boss
 └── teams/
+    ├── template/             ← 模板：複製這個資料夾開始寫自己的隊伍
     ├── example/              ← 範例隊伍，每種職業都有
+    ├── example_stage2/       ← 只用基礎技能打贏 Lv2 的範例
     ├── example_<流派>/       ← 四個流派的範例隊伍（venom、aegis、blood、necro）
     └── <你的 GitHub 帳號>/   ← 你只需要改這裡
         └── team.gd           ← 隊名、帳號、成員

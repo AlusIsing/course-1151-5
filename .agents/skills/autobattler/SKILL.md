@@ -25,6 +25,8 @@ teams/<GitHub 帳號>/       ← 資料夾名稱要和 GitHub 帳號一模一樣
 └── skills/fireball.gd     ← 可以有子資料夾和自己寫的類別
 ```
 
+學員還沒有資料夾的話，請他複製 `teams/template/`（只有一隻小兵）再改名。不要直接複製 `teams/example/` 這些範例隊伍給學員，階段 1 要他們自己寫角色。
+
 `team.gd`：
 
 ```gdscript
